@@ -33,8 +33,4 @@ project "MiniMD"
     filter "system:linux"
         links { "GL", "X11", "Xrandr", "Xinerama", "Xcursor", "Xi", "dl", "pthread" }
 
-    -- Console subsystem in Debug so stdout/stderr (GLFW errors, asserts) are visible.
-    filter "configurations:Debug"
-        kind "ConsoleApp"
-
     filter {}
