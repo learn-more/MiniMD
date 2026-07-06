@@ -1,0 +1,34 @@
+-- MiniMD workspace
+-- C++ markdown viewer built on Dear ImGui + GLFW + OpenGL3.
+-- Primary target: Windows. Linux support is wired in but not the current focus.
+
+workspace "MiniMD"
+    architecture "x86_64"
+    startproject "MiniMD"
+    configurations { "Debug", "Release" }
+    flags { "MultiProcessorCompile" }
+
+    filter "system:windows"
+        systemversion "latest"
+
+    filter "configurations:Debug"
+        defines { "DEBUG" }
+        runtime "Debug"
+        symbols "on"
+
+    filter "configurations:Release"
+        defines { "NDEBUG" }
+        runtime "Release"
+        optimize "on"
+
+    filter {}
+
+-- Shared output directory pattern, referenced by every included project script.
+outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+
+group "Vendor"
+    include "premake/imgui.lua"
+    include "premake/glfw.lua"
+group ""
+
+include "src"
