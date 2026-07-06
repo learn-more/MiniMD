@@ -33,6 +33,10 @@ project "MiniMD"
         -- We use a plain main(argc, argv), so point the linker at the console-style CRT
         -- startup instead - keeps the windowed subsystem (no console) but with our entry point.
         entrypoint "mainCRTStartup"
+        -- Embeds res/icon.ico as the GLFW_ICON resource - GLFW's Win32 backend looks it up by
+        -- that exact name and uses it for the window/taskbar icon; it also becomes the exe's
+        -- icon in Explorer. Linux has no equivalent packaging step (see README).
+        files { "res/app.rc" }
 
     filter "system:linux"
         links { "GL", "X11", "Xrandr", "Xinerama", "Xcursor", "Xi", "dl", "pthread" }

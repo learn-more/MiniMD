@@ -14,6 +14,7 @@
 #include "backends/imgui_impl_opengl3.h"
 
 #include "MarkdownView.h"
+#include "res/icon_data.h"
 
 // We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is
 // silently discarded. Send diagnostics to the debugger (visible in VS's Output window / DebugView)
@@ -72,6 +73,15 @@ int main(int argc, char** argv)
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // vsync
+
+    // Cross-platform window/taskbar icon from the pixel data baked in res/icon_data.h (see
+    // tools/make_icon.py). GLFWimage::pixels is non-const in the struct but glfwSetWindowIcon
+    // only reads it, so the const_cast here is safe.
+    GLFWimage icon;
+    icon.width = AppIcon::kWidth;
+    icon.height = AppIcon::kHeight;
+    icon.pixels = const_cast<unsigned char*>(AppIcon::kPixelsRGBA);
+    glfwSetWindowIcon(window, 1, &icon);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

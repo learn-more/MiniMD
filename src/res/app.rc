@@ -1,0 +1,7 @@
+// Windows resource script - embeds the app icon into the exe.
+//
+// The resource must be named GLFW_ICON: GLFW's Win32 backend looks up an icon resource by
+// exactly that name at window-creation time (see vendor/glfw/src/win32_window.c) and uses it
+// for both the window/title-bar icon and the taskbar/Alt-Tab entry. Being the only icon
+// resource in the module, it's also what Explorer shows for MiniMD.exe itself.
+GLFW_ICON ICON "icon.ico"
