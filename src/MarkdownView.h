@@ -6,7 +6,9 @@
 #include "imgui.h"
 #include "imgui_md.h"
 
-// Owns the loaded markdown text, and parses/renders it via MD4C (through imgui_md). Also draws a small menu bar with a path input box so a file can be opened without a native file dialog.
+// Owns the loaded markdown text, and parses/renders it via MD4C (through imgui_md). No menu bar -
+// everything (reload, zoom, debug test files, .md registration, exit) lives in a right-click
+// context menu over the document itself.
 class MarkdownView : public imgui_md
 {
 public:
@@ -15,8 +17,15 @@ public:
     void LoadFile(const std::string& path);
     void LoadDefaultSample();
 
-    void RenderMenuBar();
     void Render();
+
+    // Window title text - "MiniMD - <loaded path>", or a fallback when nothing's loaded. main.cpp
+    // polls this once per frame and only calls glfwSetWindowTitle() when it actually changes.
+    std::string GetWindowTitle() const;
+
+    // Set by the right-click menu's Exit item; main.cpp's loop checks this alongside
+    // glfwWindowShouldClose() so this class doesn't need to know about GLFW/windowing at all.
+    bool WantsQuit() const { return m_quitRequested; }
 
 protected:
     // imgui_md overrides - see vendor/imgui_md/imgui_md.h for the full set.
@@ -28,7 +37,6 @@ protected:
 private:
     std::string m_markdownText;
     std::string m_currentPath;
-    std::vector<char> m_pathInputBuffer;
 
     // One entry per contiguous, already-wrapped chunk of literal text drawn by the last Render()
     // call. [begin,end) point directly into m_markdownText - see text_run(). Used both for
@@ -56,18 +64,38 @@ private:
     std::string BuildSelectionText() const;
     void UpdateSelectionInput();
     void ResetSelection();
-
-    // ImGui's InputText only reads m_pathInputBuffer back out when the widget itself becomes
-    // active (e.g. the user clicks into it) - external writes to the buffer (drag-and-drop, argv,
-    // this same box's own callback) don't get picked up otherwise. Bumping this and folding it into
-    // the widget's ID string each time a file loads forces ImGui to treat it as a brand-new widget,
-    // which does read from the buffer.
-    int m_pathBoxGeneration = 0;
+    void CopySelectionToClipboard() const;
 
     // Set whenever a new document is loaded so Render() can snap the window's scroll position back
     // to the top on the next frame - otherwise a shorter document loaded while scrolled down in a
     // longer one just shows blank space (or the wrong section) until the user scrolls manually.
     bool m_scrollToTop = true;
+
+    bool m_quitRequested = false;
+
+    // Recent files, most-recently-opened first, persisted to a small text file in a per-user
+    // config dir (%APPDATA%\MiniMD or ~/.config/minimd - see GetConfigDir() in the .cpp) so the
+    // list survives across runs. Only ever populated by successful LoadFile() calls.
+    static constexpr size_t kMaxRecentFiles = 8;
+    std::vector<std::string> m_recentFiles;
+    void LoadRecentFiles();
+    void SaveRecentFiles() const;
+    void AddRecentFile(const std::string& path);
+
+    // Mirrors io.FontGlobalScale - kept here rather than poking IO directly from the menu so
+    // zoom in/out/reset can clamp and share one code path. Reapplied every frame at the top of
+    // Render(), so it affects the context menu and the document alike.
+    float m_fontScale = 1.0f;
+    void ZoomIn();
+    void ZoomOut();
+    void ResetZoom();
+    void UpdateZoomInput();
+
+    // Right-click popup over the document: Reload / Recent Files / View (zoom) / Debug (DEBUG
+    // builds only) / Options / Exit. Also owns the Options dialog (opened via m_showOptionsDialog
+    // since a modal can't reliably be opened mid-popup on the same frame it's requested).
+    void RenderContextMenu();
+    bool m_showOptionsDialog = false;
 
 #if defined(_WIN32)
     // Registers MiniMD as an available "Open with" handler for .md files (HKCU, no admin rights
@@ -75,5 +103,7 @@ private:
     // gated behind user confirmation in Explorer/Settings - so this just makes MiniMD show up
     // as a choice there.
     void RegisterFileAssociation();
+    void UnregisterFileAssociation();
+    bool IsFileAssociationRegistered() const;
 #endif
 };

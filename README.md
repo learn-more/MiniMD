@@ -57,11 +57,24 @@ make -j config=release
 MiniMD.exe path\to\file.md
 ```
 
-With no argument it shows a built-in sample. You can also drag-and-drop a `.md` file onto the window, or type a path into the box in the menu bar.
+With no argument it shows a built-in sample. You can also drag-and-drop a `.md` file onto the window, or reopen one via the right-click menu's Recent Files. There's no menu bar or title bar - the OS window title itself shows "MiniMD - `<loaded path>`" (or a fallback when nothing's loaded).
+
+## Right-click menu
+
+There's no menu bar - right-click anywhere over the document for:
+
+- **Reload** - re-reads the currently open file from disk. Disabled when no file is open.
+- **Recent Files** - last 8 successfully-opened files, most recent first, persisted across runs to `recent.txt` in a per-user config dir (`%APPDATA%\MiniMD` on Windows, `$XDG_CONFIG_HOME/minimd` or `~/.config/minimd` on Linux). Stored as absolute paths so they still resolve regardless of the process's working directory on a later run. Grayed out when empty; "Clear Recent Files" empties it. Only ever populated by actually opening a file - the welcome sample doesn't add to it.
+- **View > Zoom In / Zoom Out / Reset Zoom** - scales `io.FontGlobalScale` between 0.5x and 3.0x in 0.1 steps. Also bound to Ctrl+=/Ctrl+-/Ctrl+0. Current zoom percentage shown at the top of the submenu.
+- **Debug > (test file names)** - Debug builds only (gated on the `DEBUG` preprocessor define set by `configurations:Debug` in the root `premake5.lua`). Loads one of the `testdata/*.md` files by locating `testdata/` relative to the running exe's own path (`<repo_root>/bin/<cfg>-<system>-<arch>/MiniMD/../../../testdata`), so it works regardless of the process's working directory. Won't appear in Release builds at all.
+- **Options** (Windows only) - opens a small dialog with a single toggle button: "Register as .md handler" (registers MiniMD as an available "Open with" handler for `.md` files under `HKCU\Software\Classes`, no admin rights needed - doesn't force it as the default, Windows 8+ gates that behind user confirmation in Explorer/Settings) or "Unregister .md handler" if already registered.
+- **Exit** - quits the app (`MarkdownView::WantsQuit()`, checked by `main.cpp`'s loop alongside `glfwWindowShouldClose()` - this class has no GLFW dependency itself).
+
+Copying the current selection's raw markdown source is Ctrl+C (no menu item needed - it works directly off the click-drag selection).
 
 ## Known limitations / next steps
 
-- No native "Open File" dialog yet - path is typed in, dragged in, or passed as argv[1]. Adding one (e.g. nativefiledialog-extended) would be the next vendor addition.
+- No native "Open File" dialog and no path-entry box - a file's opened by dragging it in, passing it as argv[1], or picking it from Recent Files. Adding a dialog (e.g. nativefiledialog-extended) would be the next vendor addition.
 - No custom fonts - `MarkdownView::get_font()` always returns the default font, so headings/bold text don't actually look bigger or bolder even though imgui_md tracks heading level/bold state as it parses. Wiring up real `ImFont*`s per level (see `vendor/imgui_md/README.md`'s example) is the next step.
 - No image loading - `MarkdownView::get_image()` returns false, so `![...]` images are skipped rather than shown as a placeholder.
 - Code blocks/spans render as plain text, not monospace - imgui_md doesn't swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*` wired in similarly to headings.

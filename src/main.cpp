@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <string>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -98,7 +99,9 @@ int main(int argc, char** argv)
     else
         view.LoadDefaultSample();
 
-    while (!glfwWindowShouldClose(window))
+    std::string lastTitle;
+
+    while (!glfwWindowShouldClose(window) && !view.WantsQuit())
     {
         glfwPollEvents();
 
@@ -106,19 +109,27 @@ int main(int argc, char** argv)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // One full-viewport window hosting the menu bar + markdown content.
+        // One full-viewport window hosting the markdown content and its right-click context menu.
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-                                  ImGuiWindowFlags_MenuBar;
+                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
 
         ImGui::Begin("MiniMD", nullptr, flags);
-        view.RenderMenuBar();
         view.Render();
         ImGui::End();
+
+        // The ImGui window itself has no title bar (see flags above) - this drives the actual
+        // OS window/taskbar title instead. Only pushed to GLFW when it changes rather than every
+        // frame, since glfwSetWindowTitle() isn't free.
+        std::string title = view.GetWindowTitle();
+        if (title != lastTitle)
+        {
+            glfwSetWindowTitle(window, title.c_str());
+            lastTitle = title;
+        }
 
         ImGui::Render();
 

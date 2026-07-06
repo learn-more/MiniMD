@@ -1,22 +1,127 @@
 #include "MarkdownView.h"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 #if defined(_WIN32)
     #define WIN32_LEAN_AND_MEAN
     #include <Windows.h>
     #include <shellapi.h>
     #include <shlobj.h>
+#elif defined(__linux__)
+    #include <sys/stat.h>
+    #include <climits>
+    #if defined(DEBUG)
+        #include <unistd.h>
+    #endif
+#endif
+
+namespace
+{
+    // Per-user config directory, created if missing: %APPDATA%\MiniMD on Windows,
+    // $XDG_CONFIG_HOME/minimd (or ~/.config/minimd) on Linux. Empty if it can't be determined -
+    // callers treat that as "persistence unavailable, carry on without it" rather than an error.
+    std::string GetConfigDir()
+    {
+#if defined(_WIN32)
+        const char* appdata = std::getenv("APPDATA");
+        if (!appdata || !*appdata)
+            return {};
+        std::string dir = std::string(appdata) + "\\MiniMD";
+        CreateDirectoryA(dir.c_str(), nullptr); // ignore failure - already existing is fine
+        return dir;
+#elif defined(__linux__)
+        std::string base;
+        const char* xdg = std::getenv("XDG_CONFIG_HOME");
+        if (xdg && *xdg)
+        {
+            base = xdg;
+        }
+        else
+        {
+            const char* home = std::getenv("HOME");
+            if (!home || !*home)
+                return {};
+            base = std::string(home) + "/.config";
+        }
+        mkdir(base.c_str(), 0755);
+        std::string dir = base + "/minimd";
+        mkdir(dir.c_str(), 0755);
+        return dir;
+#else
+        return {};
+#endif
+    }
+
+    std::string GetRecentFilesPath()
+    {
+        std::string dir = GetConfigDir();
+        return dir.empty() ? std::string() : dir + "/recent.txt";
+    }
+
+    // Recent-files entries are stored as absolute paths so they still resolve on a later run
+    // regardless of what the process's working directory happens to be at that point.
+    std::string ToAbsolutePath(const std::string& path)
+    {
+#if defined(_WIN32)
+        char buf[MAX_PATH];
+        DWORD len = GetFullPathNameA(path.c_str(), MAX_PATH, buf, nullptr);
+        return (len == 0 || len >= MAX_PATH) ? path : std::string(buf, len);
+#elif defined(__linux__)
+        char buf[PATH_MAX];
+        char* r = realpath(path.c_str(), buf);
+        return r ? std::string(buf) : path;
+#else
+        return path;
+#endif
+    }
+}
+
+#if defined(DEBUG)
+namespace
+{
+    // Directory containing the running executable - used to find testdata/ regardless of the
+    // process's current working directory (which differs depending on whether it was launched
+    // via the VS debugger, double-clicked from bin/<cfg>/MiniMD/, or run from a shell elsewhere).
+    std::string GetExecutableDir()
+    {
+#if defined(_WIN32)
+        char buf[MAX_PATH];
+        DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+        if (len == 0 || len == MAX_PATH)
+            return {};
+        std::string path(buf, len);
+#elif defined(__linux__)
+        char buf[4096];
+        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (len <= 0)
+            return {};
+        std::string path(buf, static_cast<size_t>(len));
+#else
+        std::string path;
+#endif
+        size_t slash = path.find_last_of("\\/");
+        return slash == std::string::npos ? std::string() : path.substr(0, slash);
+    }
+
+    // The exe always lands at <repo_root>/bin/<cfg>-<system>-<arch>/MiniMD/ (see
+    // src/premake5.lua's targetdir), so this fixed number of ".." hops reaches testdata/
+    // regardless of machine or launch method.
+    std::string GetTestDataDir()
+    {
+        std::string exeDir = GetExecutableDir();
+        return exeDir.empty() ? std::string() : exeDir + "/../../../testdata";
+    }
+}
 #endif
 
 MarkdownView::MarkdownView()
-    : m_pathInputBuffer(512, '\0')
 {
+    LoadRecentFiles();
 }
 
 ImFont* MarkdownView::get_font() const
@@ -61,11 +166,7 @@ void MarkdownView::LoadFile(const std::string& path)
     ss << file.rdbuf();
     m_markdownText = ss.str();
     m_currentPath = path;
-
-    // Keep the menu-bar input box in sync when a file is opened via drag-and-drop or the command line, not just via the text box.
-    std::memset(m_pathInputBuffer.data(), 0, m_pathInputBuffer.size());
-    std::strncpy(m_pathInputBuffer.data(), path.c_str(), m_pathInputBuffer.size() - 1);
-    ++m_pathBoxGeneration;
+    AddRecentFile(path);
 
     m_scrollToTop = true;
     ResetSelection();
@@ -80,7 +181,7 @@ void MarkdownView::LoadDefaultSample()
         "## Getting started\n\n"
         "1. Drag and drop a `.md` file onto this window\n"
         "2. Or pass a file path as a command-line argument\n"
-        "3. Or type a path in the box above and press Enter\n\n"
+        "3. Or right-click > Recent Files to reopen one\n\n"
         "### Supported\n\n"
         "Feature (what's supported) | Works\n"
         "---|---\n"
@@ -95,6 +196,75 @@ void MarkdownView::LoadDefaultSample()
     m_currentPath.clear();
     m_scrollToTop = true;
     ResetSelection();
+}
+
+void MarkdownView::LoadRecentFiles()
+{
+    m_recentFiles.clear();
+    std::string path = GetRecentFilesPath();
+    if (path.empty())
+        return;
+
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line))
+    {
+        if (!line.empty())
+            m_recentFiles.push_back(line);
+    }
+}
+
+void MarkdownView::SaveRecentFiles() const
+{
+    std::string path = GetRecentFilesPath();
+    if (path.empty())
+        return;
+
+    std::ofstream f(path, std::ios::trunc);
+    for (const std::string& p : m_recentFiles)
+        f << p << '\n';
+}
+
+void MarkdownView::AddRecentFile(const std::string& path)
+{
+    std::string abs = ToAbsolutePath(path);
+    m_recentFiles.erase(std::remove(m_recentFiles.begin(), m_recentFiles.end(), abs), m_recentFiles.end());
+    m_recentFiles.insert(m_recentFiles.begin(), abs);
+    if (m_recentFiles.size() > kMaxRecentFiles)
+        m_recentFiles.resize(kMaxRecentFiles);
+    SaveRecentFiles();
+}
+
+void MarkdownView::ZoomIn()
+{
+    m_fontScale = m_fontScale + 0.1f > 3.0f ? 3.0f : m_fontScale + 0.1f;
+}
+
+void MarkdownView::ZoomOut()
+{
+    m_fontScale = m_fontScale - 0.1f < 0.5f ? 0.5f : m_fontScale - 0.1f;
+}
+
+void MarkdownView::ResetZoom()
+{
+    m_fontScale = 1.0f;
+}
+
+void MarkdownView::UpdateZoomInput()
+{
+    if (ImGui::IsAnyItemActive())
+        return; // don't fire while e.g. a dialog button/field has focus
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.KeyCtrl)
+        return;
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
+        ZoomIn();
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract))
+        ZoomOut();
+    if (ImGui::IsKeyPressed(ImGuiKey_0))
+        ResetZoom();
 }
 
 void MarkdownView::ResetSelection()
@@ -210,9 +380,9 @@ void MarkdownView::UpdateSelectionInput()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-    // Only start a *new* selection from a click that lands on the document itself, not on the
-    // menu bar/path box - but once a drag is already in progress, keep extending it even if the
-    // mouse strays over another widget or outside the window.
+    // Only start a *new* selection from a click that lands on the document itself, not on some
+    // other widget (context menu, dialog) - but once a drag is already in progress, keep
+    // extending it even if the mouse strays over another widget or outside the window.
     bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
     bool canStart = hovered && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive();
 
@@ -234,14 +404,17 @@ void MarkdownView::UpdateSelectionInput()
         m_selecting = false;
     }
 
-    // Guarded by !IsAnyItemActive() so this doesn't fight the path box's own Ctrl+C handling
-    // while it's focused.
+    // Guarded by !IsAnyItemActive() so this doesn't fight some other focused widget's own
+    // Ctrl+C handling (e.g. if a future dialog adds a text field).
     if (HasSelection() && !ImGui::IsAnyItemActive() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
-    {
-        std::string selected = BuildSelectionText();
-        if (!selected.empty())
-            ImGui::SetClipboardText(selected.c_str());
-    }
+        CopySelectionToClipboard();
+}
+
+void MarkdownView::CopySelectionToClipboard() const
+{
+    std::string selected = BuildSelectionText();
+    if (!selected.empty())
+        ImGui::SetClipboardText(selected.c_str());
 }
 
 #if defined(_WIN32)
@@ -301,58 +474,168 @@ void MarkdownView::RegisterFileAssociation()
             "MiniMD", MB_OK | MB_ICONWARNING);
     }
 }
+
+bool MarkdownView::IsFileAssociationRegistered() const
+{
+    HKEY key;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Classes\\MiniMD.md", 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return false;
+    RegCloseKey(key);
+    return true;
+}
+
+void MarkdownView::UnregisterFileAssociation()
+{
+    // Mirror image of RegisterFileAssociation(): drop the ProgID (and everything under it) plus
+    // its entry in .md's "Open With" list. Doesn't touch OpenWithProgids itself since other apps
+    // may have their own entries there.
+    RegDeleteTreeA(HKEY_CURRENT_USER, "Software\\Classes\\MiniMD.md");
+
+    HKEY key;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Classes\\.md\\OpenWithProgids", 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS)
+    {
+        RegDeleteValueA(key, "MiniMD.md");
+        RegCloseKey(key);
+    }
+
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+}
 #endif
 
-void MarkdownView::RenderMenuBar()
+std::string MarkdownView::GetWindowTitle() const
 {
-    if (ImGui::BeginMenuBar())
+    return m_currentPath.empty() ? "MiniMD - Markdown Viewer" : "MiniMD - " + m_currentPath;
+}
+
+void MarkdownView::RenderContextMenu()
+{
+    if (ImGui::BeginPopupContextWindow("ContextMenu"))
     {
-#if defined(_WIN32)
-        if (ImGui::BeginMenu("File"))
+        if (ImGui::MenuItem("Reload", nullptr, false, !m_currentPath.empty()))
+            LoadFile(m_currentPath);
+
+        if (ImGui::BeginMenu("Recent Files", !m_recentFiles.empty()))
         {
-            if (ImGui::MenuItem("Register as .md handler"))
-                RegisterFileAssociation();
+            for (size_t i = 0; i < m_recentFiles.size(); ++i)
+            {
+                const std::string& full = m_recentFiles[i];
+                size_t slash = full.find_last_of("\\/");
+                std::string filename = slash == std::string::npos ? full : full.substr(slash + 1);
+                std::string label = filename + "##recent" + std::to_string(i);
+
+                if (ImGui::MenuItem(label.c_str()))
+                    LoadFile(full);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", full.c_str());
+            }
+
+            ImGui::Separator();
+            if (ImGui::MenuItem("Clear Recent Files"))
+            {
+                m_recentFiles.clear();
+                SaveRecentFiles();
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("View"))
+        {
+            char zoomLabel[32];
+            std::snprintf(zoomLabel, sizeof(zoomLabel), "Zoom: %d%%", (int)(m_fontScale * 100.0f + 0.5f));
+            ImGui::TextDisabled("%s", zoomLabel);
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Zoom In", "Ctrl+="))
+                ZoomIn();
+            if (ImGui::MenuItem("Zoom Out", "Ctrl+-"))
+                ZoomOut();
+            if (ImGui::MenuItem("Reset Zoom", "Ctrl+0"))
+                ResetZoom();
+            ImGui::EndMenu();
+        }
+
+#if defined(DEBUG)
+        if (ImGui::BeginMenu("Debug"))
+        {
+            static const char* kTestFiles[] = {
+                "commonmark-features.md",
+                "images-local.md",
+                "images-local-remote.md",
+            };
+
+            ImGui::TextDisabled("Load test file:");
+            ImGui::Separator();
+
+            std::string dir = GetTestDataDir();
+            if (dir.empty())
+            {
+                ImGui::TextDisabled("(couldn't locate testdata/)");
+            }
+            else
+            {
+                for (const char* name : kTestFiles)
+                {
+                    if (ImGui::MenuItem(name))
+                        LoadFile(dir + "/" + name);
+                }
+            }
             ImGui::EndMenu();
         }
 #endif
 
-        // Fixed-width indicator drawn first, before the path box - it used to sit right after
-        // the box via SameLine(), so a long path filled the box edge-to-edge and ran straight
-        // into "(loaded)" with no visual gap. Putting it up front means its position never
-        // depends on how long the loaded path is. Full path is still available via tooltip
-        // in case it's longer than the box.
-        if (!m_currentPath.empty())
-        {
-            ImGui::TextDisabled("[loaded]");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", m_currentPath.c_str());
-            ImGui::SameLine();
-        }
+#if defined(_WIN32)
+        if (ImGui::MenuItem("Options"))
+            m_showOptionsDialog = true;
+#endif
 
-        ImGui::TextUnformatted("File:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(500.0f);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit"))
+            m_quitRequested = true;
 
-        // ID includes m_pathBoxGeneration so a LoadFile() triggered from outside this widget
-        // (drag-and-drop, argv, LoadDefaultSample) forces ImGui to (re)initialize its internal
-        // edit buffer from m_pathInputBuffer instead of keeping whatever it already had cached.
-        char boxId[32];
-        std::snprintf(boxId, sizeof(boxId), "##path%d", m_pathBoxGeneration);
-
-        if (ImGui::InputText(boxId, m_pathInputBuffer.data(), m_pathInputBuffer.size(),
-            ImGuiInputTextFlags_EnterReturnsTrue))
-        {
-            LoadFile(std::string(m_pathInputBuffer.data()));
-        }
-        if (ImGui::IsItemHovered() && !m_currentPath.empty())
-            ImGui::SetTooltip("%s", m_currentPath.c_str());
-
-        ImGui::EndMenuBar();
+        ImGui::EndPopup();
     }
+
+#if defined(_WIN32)
+    // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above -
+    // MenuItem closes the popup stack it lives in on the same frame it's clicked, and opening a
+    // brand-new popup into a stack that's mid-close doesn't reliably work. Deferring one frame
+    // sidesteps that.
+    if (m_showOptionsDialog)
+    {
+        ImGui::OpenPopup("Options");
+        m_showOptionsDialog = false;
+    }
+
+    if (ImGui::BeginPopupModal("Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        bool registered = IsFileAssociationRegistered();
+        if (ImGui::Button(registered ? "Unregister .md handler" : "Register as .md handler"))
+        {
+            if (registered)
+                UnregisterFileAssociation();
+            else
+                RegisterFileAssociation();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Close"))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+#endif
 }
 
 void MarkdownView::Render()
 {
+    // Reapplied every frame rather than just on a zoom action, since it's cheap and this keeps
+    // it a straight mirror of m_fontScale regardless of what else might touch IO.
+    ImGui::GetIO().FontGlobalScale = m_fontScale;
+    UpdateZoomInput();
+    RenderContextMenu();
+
     if (m_scrollToTop)
     {
         ImGui::SetScrollY(0.0f);
