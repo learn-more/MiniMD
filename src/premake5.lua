@@ -29,6 +29,10 @@ project "MiniMD"
         systemversion "latest"
         links { "opengl32" }
         defines { "_CRT_SECURE_NO_WARNINGS" }
+        -- WindowedApp -> /SUBSYSTEM:WINDOWS, whose default CRT startup calls WinMain().
+        -- We use a plain main(argc, argv), so point the linker at the console-style CRT
+        -- startup instead - keeps the windowed subsystem (no console) but with our entry point.
+        entrypoint "mainCRTStartup"
 
     filter "system:linux"
         links { "GL", "X11", "Xrandr", "Xinerama", "Xcursor", "Xi", "dl", "pthread" }

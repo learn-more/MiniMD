@@ -1,5 +1,12 @@
 #include <cstdio>
 
+#ifdef _WIN32
+// Must come before glfw3.h - both define APIENTRY, and GLFW only guards its own
+// definition with #if !defined(APIENTRY), so Windows.h has to go first.
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include "imgui.h"
@@ -8,9 +15,27 @@
 
 #include "MarkdownView.h"
 
+// We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is
+// silently discarded. Send diagnostics to the debugger (visible in VS's Output window / DebugView)
+// and, for anything fatal, pop a message box since the user has no other way to see why the app
+// didn't start. Linux keeps a real terminal, so stderr there is fine as-is.
+static void ReportError(const char* message, bool fatal)
+{
+#ifdef _WIN32
+    OutputDebugStringA(message);
+    OutputDebugStringA("\n");
+    if (fatal)
+        MessageBoxA(nullptr, message, "MiniMD", MB_OK | MB_ICONERROR);
+#else
+    std::fprintf(stderr, "%s\n", message);
+#endif
+}
+
 static void GlfwErrorCallback(int error, const char* description)
 {
-    std::fprintf(stderr, "GLFW error %d: %s\n", error, description);
+    char buf[512];
+    std::snprintf(buf, sizeof(buf), "GLFW error %d: %s", error, description);
+    ReportError(buf, false);
 }
 
 static void DropCallback(GLFWwindow* window, int count, const char** paths)
@@ -27,7 +52,10 @@ int main(int argc, char** argv)
 {
     glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit())
+    {
+        ReportError("glfwInit() failed - see debug output for the GLFW error that preceded this.", true);
         return 1;
+    }
 
     // OpenGL 3.0 context, GLSL 130 - the lowest common denominator ImGui's OpenGL3 backend supports well, keeps us compatible with older GPUs/drivers.
     const char* glsl_version = "#version 130";
@@ -37,6 +65,7 @@ int main(int argc, char** argv)
     GLFWwindow* window = glfwCreateWindow(1280, 800, "MiniMD - Markdown Viewer", nullptr, nullptr);
     if (!window)
     {
+        ReportError("glfwCreateWindow() failed - see debug output for the GLFW error that preceded this.", true);
         glfwTerminate();
         return 1;
     }
