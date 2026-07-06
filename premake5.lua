@@ -29,6 +29,7 @@ outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 group "Vendor"
     include "premake/imgui.lua"
     include "premake/glfw.lua"
+    include "premake/imgui_md.lua"
 group ""
 
 include "src"

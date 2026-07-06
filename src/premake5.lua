@@ -18,11 +18,12 @@ project "MiniMD"
         ".",
         "../vendor/imgui",
         "../vendor/imgui/backends",
-        "../vendor/imgui_markdown",
+        "../vendor/imgui_md",
+        "../vendor/md4c/src",
         "../vendor/glfw/include",
     }
 
-    links { "ImGui", "GLFW" }
+    links { "ImGui", "GLFW", "ImGuiMd" }
 
     filter "system:windows"
         systemversion "latest"

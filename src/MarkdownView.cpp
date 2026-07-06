@@ -14,37 +14,35 @@
 MarkdownView::MarkdownView()
     : m_pathInputBuffer(512, '\0')
 {
-    SetupConfig();
 }
 
-void MarkdownView::SetupConfig()
+ImFont* MarkdownView::get_font() const
 {
-    m_config.linkCallback     = &MarkdownView::LinkCallback;
-    m_config.tooltipCallback  = nullptr;
-    m_config.imageCallback    = nullptr;
-    m_config.linkIcon         = "";
-
-    // No custom fonts loaded (yet) - use the default font for every heading
-    // level, with a separator line under H1/H2 to visually distinguish them.
-    // Swap in bigger/bold ImFont* here once custom fonts are added.
-    m_config.headingFormats[0] = { nullptr, true };   // H1
-    m_config.headingFormats[1] = { nullptr, true };   // H2
-    m_config.headingFormats[2] = { nullptr, false };  // H3
-
-    m_config.formatFlags = ImGuiMarkdownFormatFlags_GithubStyle;
+    // No custom fonts loaded (yet) - default font for everything. imgui_md
+    // still tracks m_hlevel / m_is_strong / m_is_table_header as it parses,
+    // so plugging in real heading/bold ImFont*s here later (per the
+    // mekhontsev/imgui_md README example) is enough to make headings look
+    // like headings without touching anything else.
+    return nullptr;
 }
 
-void MarkdownView::LinkCallback(ImGui::MarkdownLinkCallbackData data)
+bool MarkdownView::get_image(image_info& nfo) const
 {
-    if (data.isImage)
+    // No image loading yet - returning false skips the image entirely
+    // rather than drawing a placeholder.
+    (void)nfo;
+    return false;
+}
+
+void MarkdownView::open_url() const
+{
+    if (m_href.empty())
         return;
 
-    std::string url(data.link, static_cast<size_t>(data.linkLength));
-
 #if defined(_WIN32)
-    ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    ShellExecuteA(nullptr, "open", m_href.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #elif defined(__linux__)
-    std::string cmd = "xdg-open \"" + url + "\" >/dev/null 2>&1 &";
+    std::string cmd = "xdg-open \"" + m_href + "\" >/dev/null 2>&1 &";
     std::system(cmd.c_str());
 #endif
 }
@@ -73,18 +71,24 @@ void MarkdownView::LoadFile(const std::string& path)
 void MarkdownView::LoadDefaultSample()
 {
     m_markdownText =
-        "# MiniMD\n"
-        "A lightweight markdown viewer built with **Dear ImGui**.\n\n"
-        "## Getting started\n"
-        "  * Drag and drop a `.md` file onto this window\n"
-        "  * Or pass a file path as a command-line argument\n"
-        "  * Or type a path in the box above and press Enter\n\n"
-        "### Links\n"
-        "  * [Dear ImGui](https://github.com/ocornut/imgui)\n"
-        "  * [GLFW](https://www.glfw.org/)\n"
-        "  * [imgui_markdown](https://github.com/juliettef/imgui_markdown)\n\n"
-        "*Emphasis* and **strong emphasis** both work, as do horizontal rules:\n"
-        "***\n";
+        "# MiniMD\n\n"
+        "A lightweight markdown viewer built with **Dear ImGui**, using "
+        "[MD4C](https://github.com/mity/md4c) for parsing.\n\n"
+        "## Getting started\n\n"
+        "1. Drag and drop a `.md` file onto this window\n"
+        "2. Or pass a file path as a command-line argument\n"
+        "3. Or type a path in the box above and press Enter\n\n"
+        "### Supported\n\n"
+        "Feature (what's supported) | Works\n"
+        "---|---\n"
+        "Headings + emphasis | yes\n"
+        "Ordered / unordered lists | yes\n"
+        "Strikethrough + underline | yes\n"
+        "Inline code spans | yes\n"
+        "Tables (this one) | yes\n\n"
+        "Links: [Dear ImGui](https://github.com/ocornut/imgui), "
+        "[MD4C](https://github.com/mity/md4c), "
+        "[imgui_md](https://github.com/mekhontsev/imgui_md)\n";
     m_currentPath.clear();
 }
 
@@ -113,5 +117,5 @@ void MarkdownView::RenderMenuBar()
 
 void MarkdownView::Render()
 {
-    ImGui::Markdown(m_markdownText.c_str(), m_markdownText.length(), m_config);
+    print(m_markdownText.c_str(), m_markdownText.c_str() + m_markdownText.length());
 }

@@ -10,9 +10,11 @@ handle Linux (X11) too, it just hasn't been exercised yet.
   Dear ImGui supports: no platform SDK dependency (unlike a Win32+DX11
   backend), no extra runtime weight (unlike SDL), and OpenGL3 needs no
   shader/pipeline setup of its own - ImGui's backend handles that internally.
-- **imgui_markdown** (juliettef/imgui_markdown) is a single header that
-  parses and renders markdown directly into ImGui draw calls - no
-  intermediate AST, no extra renderer to wire up.
+- **imgui_md + MD4C** (mekhontsev/imgui_md on top of mity/md4c) renders
+  actual CommonMark/GFM: tables, ordered lists, strikethrough, underline,
+  fenced code, basic inline HTML - not just a pseudo-markdown subset. MD4C
+  does the parsing (small, dependency-free C parser); imgui_md turns its
+  parse callbacks into ImGui draw calls.
 
 ## Layout
 
@@ -20,6 +22,7 @@ handle Linux (X11) too, it just hasn't been exercised yet.
 premake5.lua            workspace + configuration
 premake/imgui.lua        builds vendor/imgui as a static lib
 premake/glfw.lua         builds vendor/glfw as a static lib
+premake/imgui_md.lua     builds vendor/imgui_md + vendor/md4c as a static lib
 src/                     the app itself (MiniMD project)
 vendor/                  submodules (see vendor/README.md)
 ```
@@ -31,8 +34,10 @@ have this repo on a machine with internet access:
 
 ```
 git submodule add https://github.com/ocornut/imgui.git vendor/imgui
-git submodule add -b 3.3.9 https://github.com/glfw/glfw.git vendor/glfw
-git submodule add https://github.com/juliettef/imgui_markdown.git vendor/imgui_markdown
+git submodule add https://github.com/glfw/glfw.git vendor/glfw
+cd vendor/glfw && git checkout 3.3.9 && cd ../..
+git submodule add https://github.com/mekhontsev/imgui_md.git vendor/imgui_md
+git submodule add https://github.com/mity/md4c.git vendor/md4c
 git submodule update --init --recursive
 ```
 
@@ -73,13 +78,19 @@ With no argument it shows a built-in sample. You can also drag-and-drop a
 - No native "Open File" dialog yet - path is typed in, dragged in, or passed
   as argv[1]. Adding one (e.g. nativefiledialog-extended) would be the next
   vendor addition.
-- No custom fonts - headings are rendered with the default font plus a
-  separator line rather than a genuinely larger/bolder face. Loading extra
-  `ImFont*` sizes and wiring them into `MarkdownView`'s heading config would
-  fix this.
-- Only H1-H3, emphasis, unordered lists, links, images, and horizontal rules
-  are supported - whatever imgui_markdown itself covers. No tables, no code
-  blocks/fencing, no ordered lists.
+- No custom fonts - `MarkdownView::get_font()` always returns the default
+  font, so headings/bold text don't actually look bigger or bolder even
+  though imgui_md tracks heading level/bold state as it parses. Wiring up
+  real `ImFont*`s per level (see `vendor/imgui_md/README.md`'s example) is
+  the next step.
+- No image loading - `MarkdownView::get_image()` returns false, so `![...]`
+  images are skipped rather than shown as a placeholder.
+- Code blocks/spans render as plain text, not monospace - imgui_md doesn't
+  swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*`
+  wired in similarly to headings.
+- Table cell alignment is whatever imgui_md defaults to (left-aligned,
+  header row highlighted) - column alignment markers (`:--`, `--:`) in the
+  source aren't applied to layout.
 - The GLFW premake script targets the pre-3.4 source layout (tag `3.3.9`).
   Bumping to GLFW 3.4+ requires updating `premake/glfw.lua`'s file list for
   the new platform-abstraction sources (`platform.c`, `null_*.c`).

@@ -9,3 +9,4 @@ Makefile
 *.make
 obj/
 .vscode/
+src/imgui.ini
