@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -49,6 +50,7 @@ void MarkdownView::LoadFile(const std::string& path)
     {
         m_markdownText = "**Error:** could not open file `" + path + "`";
         m_currentPath.clear();
+        m_scrollToTop = true;
         return;
     }
 
@@ -60,6 +62,9 @@ void MarkdownView::LoadFile(const std::string& path)
     // Keep the menu-bar input box in sync when a file is opened via drag-and-drop or the command line, not just via the text box.
     std::memset(m_pathInputBuffer.data(), 0, m_pathInputBuffer.size());
     std::strncpy(m_pathInputBuffer.data(), path.c_str(), m_pathInputBuffer.size() - 1);
+    ++m_pathBoxGeneration;
+
+    m_scrollToTop = true;
 }
 
 void MarkdownView::LoadDefaultSample()
@@ -84,26 +89,43 @@ void MarkdownView::LoadDefaultSample()
         "[MD4C](https://github.com/mity/md4c), "
         "[imgui_md](https://github.com/mekhontsev/imgui_md)\n";
     m_currentPath.clear();
+    m_scrollToTop = true;
 }
 
 void MarkdownView::RenderMenuBar()
 {
     if (ImGui::BeginMenuBar())
     {
+        // Fixed-width indicator drawn first, before the path box - it used to sit right after
+        // the box via SameLine(), so a long path filled the box edge-to-edge and ran straight
+        // into "(loaded)" with no visual gap. Putting it up front means its position never
+        // depends on how long the loaded path is. Full path is still available via tooltip
+        // in case it's longer than the box.
+        if (!m_currentPath.empty())
+        {
+            ImGui::TextDisabled("[loaded]");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", m_currentPath.c_str());
+            ImGui::SameLine();
+        }
+
         ImGui::TextUnformatted("File:");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(500.0f);
-        if (ImGui::InputText("##path", m_pathInputBuffer.data(), m_pathInputBuffer.size(),
+
+        // ID includes m_pathBoxGeneration so a LoadFile() triggered from outside this widget
+        // (drag-and-drop, argv, LoadDefaultSample) forces ImGui to (re)initialize its internal
+        // edit buffer from m_pathInputBuffer instead of keeping whatever it already had cached.
+        char boxId[32];
+        std::snprintf(boxId, sizeof(boxId), "##path%d", m_pathBoxGeneration);
+
+        if (ImGui::InputText(boxId, m_pathInputBuffer.data(), m_pathInputBuffer.size(),
             ImGuiInputTextFlags_EnterReturnsTrue))
         {
             LoadFile(std::string(m_pathInputBuffer.data()));
         }
-
-        if (!m_currentPath.empty())
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(loaded)");
-        }
+        if (ImGui::IsItemHovered() && !m_currentPath.empty())
+            ImGui::SetTooltip("%s", m_currentPath.c_str());
 
         ImGui::EndMenuBar();
     }
@@ -111,5 +133,11 @@ void MarkdownView::RenderMenuBar()
 
 void MarkdownView::Render()
 {
+    if (m_scrollToTop)
+    {
+        ImGui::SetScrollY(0.0f);
+        m_scrollToTop = false;
+    }
+
     print(m_markdownText.c_str(), m_markdownText.c_str() + m_markdownText.length());
 }
