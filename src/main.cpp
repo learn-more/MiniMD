@@ -1,8 +1,6 @@
 #include <cstdio>
 
 #ifdef _WIN32
-// Must come before glfw3.h - both define APIENTRY, and GLFW only guards its own
-// definition with #if !defined(APIENTRY), so Windows.h has to go first.
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
@@ -16,10 +14,9 @@
 #include "MarkdownView.h"
 #include "res/icon_data.h"
 
-// We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is
-// silently discarded. Send diagnostics to the debugger (visible in VS's Output window / DebugView)
-// and, for anything fatal, pop a message box since the user has no other way to see why the app
-// didn't start. Linux keeps a real terminal, so stderr there is fine as-is.
+// We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is silently discarded.
+// Send diagnostics to the debugger (visible in VS's Output window / DebugView) and, for anything fatal, pop a message box since the user has no other way to see why the app didn't start.
+// Linux keeps a real terminal, so stderr there is fine as-is.
 static void ReportError(const char* message, bool fatal)
 {
 #ifdef _WIN32
