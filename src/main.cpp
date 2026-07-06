@@ -29,8 +29,7 @@ int main(int argc, char** argv)
     if (!glfwInit())
         return 1;
 
-    // OpenGL 3.0 context, GLSL 130 - the lowest common denominator ImGui's
-    // OpenGL3 backend supports well, keeps us compatible with older GPUs/drivers.
+    // OpenGL 3.0 context, GLSL 130 - the lowest common denominator ImGui's OpenGL3 backend supports well, keeps us compatible with older GPUs/drivers.
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);

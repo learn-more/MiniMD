@@ -1,20 +1,11 @@
 # MiniMD
 
-A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake5.
-Windows is the primary target; the premake scripts and vendor build already
-handle Linux (X11) too, it just hasn't been exercised yet.
+A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake5. Windows is the primary target; the premake scripts and vendor build already handle Linux (X11) too, it just hasn't been exercised yet.
 
 ## Why this stack
 
-- **GLFW + OpenGL3** is the lightest, most portable windowing/renderer combo
-  Dear ImGui supports: no platform SDK dependency (unlike a Win32+DX11
-  backend), no extra runtime weight (unlike SDL), and OpenGL3 needs no
-  shader/pipeline setup of its own - ImGui's backend handles that internally.
-- **imgui_md + MD4C** (mekhontsev/imgui_md on top of mity/md4c) renders
-  actual CommonMark/GFM: tables, ordered lists, strikethrough, underline,
-  fenced code, basic inline HTML - not just a pseudo-markdown subset. MD4C
-  does the parsing (small, dependency-free C parser); imgui_md turns its
-  parse callbacks into ImGui draw calls.
+- **GLFW + OpenGL3** is the lightest, most portable windowing/renderer combo Dear ImGui supports: no platform SDK dependency (unlike a Win32+DX11 backend), no extra runtime weight (unlike SDL), and OpenGL3 needs no shader/pipeline setup of its own - ImGui's backend handles that internally.
+- **imgui_md + MD4C** (mekhontsev/imgui_md on top of mity/md4c) renders actual CommonMark/GFM: tables, ordered lists, strikethrough, underline, fenced code, basic inline HTML - not just a pseudo-markdown subset. MD4C does the parsing (small, dependency-free C parser); imgui_md turns its parse callbacks into ImGui draw calls.
 
 ## Layout
 
@@ -29,8 +20,7 @@ vendor/                  submodules (see vendor/README.md)
 
 ## First-time setup
 
-The vendor libraries aren't committed - pull them in as submodules once you
-have this repo on a machine with internet access:
+The vendor libraries aren't committed - pull them in as submodules once you have this repo on a machine with internet access:
 
 ```
 git submodule add https://github.com/ocornut/imgui.git vendor/imgui
@@ -41,20 +31,17 @@ git submodule add https://github.com/mity/md4c.git vendor/md4c
 git submodule update --init --recursive
 ```
 
-(If the repo was cloned from somewhere that already has `.gitmodules`
-committed, just run `git submodule update --init --recursive` instead.)
+(If the repo was cloned from somewhere that already has `.gitmodules` committed, just run `git submodule update --init --recursive` instead.)
 
 ## Building - Windows
 
-Get `premake5.exe` (https://premake.github.io/download) onto your PATH, then
-from the repo root:
+Get `premake5.exe` (https://premake.github.io/download) onto your PATH, then from the repo root:
 
 ```
 premake5 vs2022
 ```
 
-Open the generated `MiniMD.sln` and build. The exe lands in
-`bin/<config>-windows-x86_64/MiniMD/`.
+Open the generated `MiniMD.sln` and build. The exe lands in `bin/<config>-windows-x86_64/MiniMD/`.
 
 ## Building - Linux (future)
 
@@ -70,27 +57,15 @@ make -j config=release
 MiniMD.exe path\to\file.md
 ```
 
-With no argument it shows a built-in sample. You can also drag-and-drop a
-`.md` file onto the window, or type a path into the box in the menu bar.
+With no argument it shows a built-in sample. You can also drag-and-drop a `.md` file onto the window, or type a path into the box in the menu bar.
 
 ## Known limitations / next steps
 
-- No native "Open File" dialog yet - path is typed in, dragged in, or passed
-  as argv[1]. Adding one (e.g. nativefiledialog-extended) would be the next
-  vendor addition.
-- No custom fonts - `MarkdownView::get_font()` always returns the default
-  font, so headings/bold text don't actually look bigger or bolder even
-  though imgui_md tracks heading level/bold state as it parses. Wiring up
-  real `ImFont*`s per level (see `vendor/imgui_md/README.md`'s example) is
-  the next step.
-- No image loading - `MarkdownView::get_image()` returns false, so `![...]`
-  images are skipped rather than shown as a placeholder.
-- Code blocks/spans render as plain text, not monospace - imgui_md doesn't
-  swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*`
-  wired in similarly to headings.
-- Table cell alignment is whatever imgui_md defaults to (left-aligned,
-  header row highlighted) - column alignment markers (`:--`, `--:`) in the
-  source aren't applied to layout.
-- The GLFW premake script targets the pre-3.4 source layout (tag `3.3.9`).
-  Bumping to GLFW 3.4+ requires updating `premake/glfw.lua`'s file list for
-  the new platform-abstraction sources (`platform.c`, `null_*.c`).
+- No native "Open File" dialog yet - path is typed in, dragged in, or passed as argv[1]. Adding one (e.g. nativefiledialog-extended) would be the next vendor addition.
+- No custom fonts - `MarkdownView::get_font()` always returns the default font, so headings/bold text don't actually look bigger or bolder even though imgui_md tracks heading level/bold state as it parses. Wiring up real `ImFont*`s per level (see `vendor/imgui_md/README.md`'s example) is the next step.
+- No image loading - `MarkdownView::get_image()` returns false, so `![...]` images are skipped rather than shown as a placeholder.
+- Code blocks/spans render as plain text, not monospace - imgui_md doesn't swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*` wired in similarly to headings.
+- Table cell alignment is whatever imgui_md defaults to (left-aligned, header row highlighted) - column alignment markers (`:--`, `--:`) in the source aren't applied to layout.
+- Column width is set by the *header* cell's rendered text width, not the widest cell in that column (imgui_md's own limitation, not something we can fix from the outside). A short header over long content ("Feature" / "Some long sentence here") wraps the content character-by-character into a squished column. Write headers at least as wide as the widest cell below them if a table looks broken.
+- Known upstream bug: `imgui_md`'s default `get_image()` assigns `ImFontAtlas::TexID` (now `ImTextureRef`, since imgui 1.92) straight into an `ImTextureID` field, which won't compile against current imgui. Patch `vendor/imgui_md/imgui_md.cpp` after cloning it - change that line to `nfo.texture_id = ImGui::GetIO().Fonts->TexID.GetTexID();`
+- The GLFW premake script targets the pre-3.4 source layout (tag `3.3.9`). Bumping to GLFW 3.4+ requires updating `premake/glfw.lua`'s file list for the new platform-abstraction sources (`platform.c`, `null_*.c`).

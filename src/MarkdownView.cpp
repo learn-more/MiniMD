@@ -18,18 +18,13 @@ MarkdownView::MarkdownView()
 
 ImFont* MarkdownView::get_font() const
 {
-    // No custom fonts loaded (yet) - default font for everything. imgui_md
-    // still tracks m_hlevel / m_is_strong / m_is_table_header as it parses,
-    // so plugging in real heading/bold ImFont*s here later (per the
-    // mekhontsev/imgui_md README example) is enough to make headings look
-    // like headings without touching anything else.
+    // No custom fonts loaded (yet) - default font for everything. imgui_md still tracks m_hlevel / m_is_strong / m_is_table_header as it parses, so plugging in real heading/bold ImFont*s here later (per the mekhontsev/imgui_md README example) is enough to make headings look like headings without touching anything else.
     return nullptr;
 }
 
 bool MarkdownView::get_image(image_info& nfo) const
 {
-    // No image loading yet - returning false skips the image entirely
-    // rather than drawing a placeholder.
+    // No image loading yet - returning false skips the image entirely rather than drawing a placeholder.
     (void)nfo;
     return false;
 }
@@ -62,8 +57,7 @@ void MarkdownView::LoadFile(const std::string& path)
     m_markdownText = ss.str();
     m_currentPath = path;
 
-    // Keep the menu-bar input box in sync when a file is opened via
-    // drag-and-drop or the command line, not just via the text box.
+    // Keep the menu-bar input box in sync when a file is opened via drag-and-drop or the command line, not just via the text box.
     std::memset(m_pathInputBuffer.data(), 0, m_pathInputBuffer.size());
     std::strncpy(m_pathInputBuffer.data(), path.c_str(), m_pathInputBuffer.size() - 1);
 }

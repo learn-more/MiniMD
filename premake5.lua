@@ -1,6 +1,4 @@
--- MiniMD workspace
--- C++ markdown viewer built on Dear ImGui + GLFW + OpenGL3.
--- Primary target: Windows. Linux support is wired in but not the current focus.
+-- MiniMD workspace - C++ markdown viewer built on Dear ImGui + GLFW + OpenGL3. Primary target: Windows. Linux support is wired in but not the current focus.
 
 workspace "MiniMD"
     architecture "x86_64"

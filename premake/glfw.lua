@@ -1,9 +1,4 @@
--- Builds GLFW itself from source (vendor/glfw submodule) as a static library.
--- Pin the submodule to tag 3.3.9 - this file list matches GLFW's classic
--- (pre-3.4 platform-abstraction) source layout. If you bump the submodule
--- to 3.4+, GLFW added a runtime backend-selection layer (platform.c and
--- null_*.c are now always required) - update this file's `files` list
--- accordingly or the link will fail with unresolved externals.
+-- Builds GLFW itself from source (vendor/glfw submodule) as a static library. Pin the submodule to tag 3.3.9 - this file list matches GLFW's classic (pre-3.4 platform-abstraction) source layout. If you bump the submodule to 3.4+, GLFW added a runtime backend-selection layer (platform.c and null_*.c are now always required) - update this file's `files` list accordingly or the link will fail with unresolved externals.
 
 project "GLFW"
     kind "StaticLib"
@@ -41,8 +36,7 @@ project "GLFW"
         }
         defines { "_GLFW_WIN32", "_CRT_SECURE_NO_WARNINGS" }
 
-    -- Linux target (future): X11 backend. Requires libx11-dev, libxrandr-dev,
-    -- libxinerama-dev, libxcursor-dev, libxi-dev on the build machine.
+    -- Linux target (future): X11 backend. Requires libx11-dev, libxrandr-dev, libxinerama-dev, libxcursor-dev, libxi-dev on the build machine.
     filter "system:linux"
         pic "on"
         files

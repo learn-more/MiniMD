@@ -6,9 +6,7 @@
 #include "imgui.h"
 #include "imgui_md.h"
 
-// Owns the loaded markdown text, and parses/renders it via MD4C (through
-// imgui_md). Also draws a small menu bar with a path input box so a file
-// can be opened without a native file dialog.
+// Owns the loaded markdown text, and parses/renders it via MD4C (through imgui_md). Also draws a small menu bar with a path input box so a file can be opened without a native file dialog.
 class MarkdownView : public imgui_md
 {
 public:

@@ -1,6 +1,4 @@
--- Builds Dear ImGui (core + GLFW/OpenGL3 backends) as a static library.
--- Source lives entirely in vendor/imgui (git submodule), this file is the
--- only thing in the whole repo that knows how to compile it.
+-- Builds Dear ImGui (core + GLFW/OpenGL3 backends) as a static library. Source lives entirely in vendor/imgui (git submodule), this file is the only thing in the whole repo that knows how to compile it.
 
 project "ImGui"
     kind "StaticLib"
@@ -24,10 +22,7 @@ project "ImGui"
         "../vendor/imgui/imstb_textedit.h",
         "../vendor/imgui/imstb_truetype.h",
 
-        -- Backends: GLFW (windowing/input) + OpenGL3 (rendering).
-        -- This is the lightest, most portable combo ImGui supports -
-        -- no platform SDK dependency (unlike Win32/DX11) and no extra
-        -- runtime like SDL.
+        -- Backends: GLFW (windowing/input) + OpenGL3 (rendering). This is the lightest, most portable combo ImGui supports - no platform SDK dependency (unlike Win32/DX11) and no extra runtime like SDL.
         "../vendor/imgui/backends/imgui_impl_glfw.h",
         "../vendor/imgui/backends/imgui_impl_glfw.cpp",
         "../vendor/imgui/backends/imgui_impl_opengl3.h",
