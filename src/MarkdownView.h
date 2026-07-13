@@ -24,12 +24,20 @@ public:
 
     // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), all built
     // once in main.cpp after the font atlas exists. get_font() picks the heading entry by
-    // m_hlevel; a null entry (or index out of range) falls back to whichever font is current
+    // m_hlevel, then the bold/italic/bold-italic variant of whichever that is by m_is_strong/
+    // m_is_em; a null entry (or index out of range) falls back to whichever font is current
     // (i.e. the body font - see get_font()).
+    struct Weights
+    {
+        ImFont* regular = nullptr;
+        ImFont* bold = nullptr;
+        ImFont* italic = nullptr;
+        ImFont* boldItalic = nullptr;
+    };
     struct FontSet
     {
-        ImFont* body = nullptr;
-        std::array<ImFont*, 6> headings{};
+        Weights body;
+        std::array<Weights, 6> headings{};
     };
 
     // One FontSet per FontFamily value, handed in once at startup. Also applies the current
@@ -57,11 +65,13 @@ protected:
 private:
     std::string m_markdownText;
     std::string m_currentPath;
-    std::array<ImFont*, 6> m_headingFonts{};
+    std::array<Weights, 6> m_headingFonts{};
+    Weights m_bodyFont;
 
     // Fonts for both families, as handed in via SetFonts(). m_fontFamily picks which one is
-    // active; ApplyFontFamily() copies its headings into m_headingFonts and points io.FontDefault
-    // at its body font (body text has no per-run font of its own - see get_font()).
+    // active; ApplyFontFamily() copies its headings into m_headingFonts and its body weights into
+    // m_bodyFont, and points io.FontDefault at the body's regular weight (plain body text has no
+    // per-run font of its own - see get_font() - only its bold/italic/bold-italic runs do).
     std::array<FontSet, 2> m_fontSets;
     FontFamily m_fontFamily = FontFamily::Inter;
     void ApplyFontFamily();

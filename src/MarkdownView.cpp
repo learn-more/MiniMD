@@ -128,17 +128,39 @@ void MarkdownView::ApplyFontFamily()
 {
     const FontSet& set = m_fontSets[static_cast<size_t>(m_fontFamily)];
     m_headingFonts = set.headings;
+    m_bodyFont = set.body;
 
-    // Body text has no per-run font of its own (get_font() returns nullptr outside headings, which PushFont() takes to mean "whatever's current") - so the body font is swapped in via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the document.
-    ImGui::GetIO().FontDefault = set.body;
+    // Plain body text has no per-run font of its own (get_font() returns nullptr for it, which
+    // PushFont() takes to mean "whatever's current") - so the body's regular weight is swapped in
+    // via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the
+    // document. Bold/italic body runs still go through get_font() - see there.
+    ImGui::GetIO().FontDefault = set.body.regular;
 }
 
 ImFont* MarkdownView::get_font() const
 {
-    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Fonts are built once in main.cpp and handed in via SetFonts()/ApplyFontFamily() - index/null-check here so a missing font (atlas build failed, etc.) just falls back to the default rather than dereferencing null.
-    if (m_hlevel >= 1 && m_hlevel <= m_headingFonts.size() && m_headingFonts[m_hlevel - 1])
-        return m_headingFonts[m_hlevel - 1];
-    return nullptr;
+    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Fonts are built once in
+    // main.cpp and handed in via SetFonts()/ApplyFontFamily() - index/null-check here so a
+    // missing font (atlas build failed, etc.) just falls back to the default rather than
+    // dereferencing null.
+    bool inHeading = m_hlevel >= 1 && m_hlevel <= m_headingFonts.size();
+    const Weights& set = inHeading ? m_headingFonts[m_hlevel - 1] : m_bodyFont;
+
+    ImFont* f = nullptr;
+    if (m_is_strong && m_is_em)
+        f = set.boldItalic;
+    else if (m_is_strong)
+        f = set.bold;
+    else if (m_is_em)
+        f = set.italic;
+
+    if (f)
+        return f;
+
+    // No dedicated bold/italic/bold-italic variant available (or plain text): headings still
+    // need their own regular-weight font to get their larger size; plain body text falls back to
+    // nullptr so PushFont() leaves whatever's current (io.FontDefault) alone.
+    return inHeading ? set.regular : nullptr;
 }
 
 bool MarkdownView::get_image(image_info& nfo) const

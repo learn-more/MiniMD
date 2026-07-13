@@ -94,18 +94,33 @@ int main(int argc, char** argv)
     static const float kBodySize = 16.0f;
     static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
 
-    auto loadFontSet = [&](const char* compressedBase85) -> MarkdownView::FontSet
+    // One compressed TTF blob per weight/style - regular, bold, italic, bold-italic - each baked
+    // at every size (body + 6 headings) so **bold** and *italic* spans get a real font instead of
+    // just reusing the regular glyphs (see MarkdownView::get_font()).
+    auto loadWeights = [&](const char* regular, const char* bold, const char* italic, const char* boldItalic, float size) -> MarkdownView::Weights
+    {
+        MarkdownView::Weights w;
+        w.regular = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, size);
+        w.bold = io.Fonts->AddFontFromMemoryCompressedBase85TTF(bold, size);
+        w.italic = io.Fonts->AddFontFromMemoryCompressedBase85TTF(italic, size);
+        w.boldItalic = io.Fonts->AddFontFromMemoryCompressedBase85TTF(boldItalic, size);
+        return w;
+    };
+
+    auto loadFontSet = [&](const char* regular, const char* bold, const char* italic, const char* boldItalic) -> MarkdownView::FontSet
     {
         MarkdownView::FontSet set;
-        set.body = io.Fonts->AddFontFromMemoryCompressedBase85TTF(compressedBase85, kBodySize);
+        set.body = loadWeights(regular, bold, italic, boldItalic, kBodySize);
         for (size_t i = 0; i < set.headings.size(); ++i)
-            set.headings[i] = io.Fonts->AddFontFromMemoryCompressedBase85TTF(compressedBase85, kHeadingSizes[i]);
+            set.headings[i] = loadWeights(regular, bold, italic, boldItalic, kHeadingSizes[i]);
         return set;
     };
 
     std::array<MarkdownView::FontSet, 2> fontSets{
-        loadFontSet(AppFonts::kInterCompressedDataBase85),
-        loadFontSet(AppFonts::kNotoSansCompressedDataBase85),
+        loadFontSet(AppFonts::kInterRegularCompressedDataBase85, AppFonts::kInterBoldCompressedDataBase85,
+                    AppFonts::kInterItalicCompressedDataBase85, AppFonts::kInterBoldItalicCompressedDataBase85),
+        loadFontSet(AppFonts::kNotoSansRegularCompressedDataBase85, AppFonts::kNotoSansBoldCompressedDataBase85,
+                    AppFonts::kNotoSansItalicCompressedDataBase85, AppFonts::kNotoSansBoldItalicCompressedDataBase85),
     };
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
