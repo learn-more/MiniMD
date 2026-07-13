@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cfloat>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -64,6 +65,14 @@ private:
     // see text_run()) from an inline code *span* (tight rounded pill) sharing the same underlying m_is_code flag. No monospace font is swapped
     // in for either - see BLOCK_CODE()/SPAN_CODE() in the .cpp for why.
     bool m_inCodeBlock = false;
+
+    // Y (screen space) of the code-block line whose full-width background band was last drawn by text_run() - lets it draw that band once per
+    // *line* instead of once per run. A single source line commonly arrives as more than one run (e.g. leading indentation and the line's own
+    // content are separate runs sharing the same row), and since every run's band already extends to the right margin, drawing it again per
+    // run would stack a second, visibly darker layer (ImGuiCol_FrameBg has partial alpha) over most of the line instead of just re-covering
+    // ground the first run's band already painted. Y only ever increases as the document lays out top-to-bottom, so a plain "did this row
+    // already get one" comparison is enough - no reset between blocks is needed.
+    float m_codeBandRowY = -FLT_MAX;
 
     // Table cell alignment (":---"/"---:"/":-:" column specs). Real ImGui tables auto-fit column width to content and
     // don't expose a per-cell content-alignment flag, so BLOCK_TD() shifts the cell's already-drawn vertices left/

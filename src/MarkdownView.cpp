@@ -577,14 +577,33 @@ void MarkdownView::text_run(const char* str, const char* str_end, const ImVec2& 
     // Code spans/blocks get no dedicated monospace font (see BLOCK_CODE()) - a background band behind the glyphs is the only visual cue that
     // this text is code, so draw it here, before the glyphs land on top of it. Block code gets a full-width, square-cornered band per wrapped
     // line (m_inCodeBlock); an inline code span gets a tight, rounded pill hugging just its own text.
-    if (m_is_code)
+    //
+    // Skips zero-width runs (min.x == max.x): md4c delivers each code-block source line as two text_run() calls - the line's own content, then
+    // a second, separate call for just the trailing '\n' terminating it (see md4c's own doc comment on MD_BLOCK_CODE). That second call has no
+    // glyphs to draw, but without this guard it would still stamp its own full-width background rect - stacking a second, doubly-blended layer
+    // over everything to the right of the real text (ImGuiCol_FrameBg has partial alpha, so overlapping fills visibly darken/saturate) and
+    // leaving the actual text's own background a shade lighter than the empty space beside it.
+    if (m_is_code && max.x > min.x)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImU32 col = ImGui::GetColorU32(ImGuiCol_FrameBg);
         if (m_inCodeBlock)
         {
-            float rightX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-            dl->AddRectFilled(ImVec2(min.x - 4.0f, min.y - 1.0f), ImVec2(rightX, max.y + 1.0f), col);
+            // A source line commonly reaches here as more than one run (e.g. leading indentation and the line's own content are separate
+            // runs sharing the same row) - only the first one actually needs to draw, since its band already extends to the right margin. A
+            // later run on the same row falling through to the pill-drawing branch below (the "else" only meant for inline code *spans*)
+            // was the earlier bug here: it stacked a second, tightly-fitted layer over just its own glyphs, on top of the first run's already-
+            // full-width band, leaving that glyph run's background a shade darker than the empty space around it.
+            if (min.y != m_codeBandRowY)
+            {
+                // Padded by half of ItemSpacing.y, not a fixed 1px, so this line's band and the next line's band meet with no gap between
+                // them: each TextUnformitted() call for a code line is its own ImGui "item", so consecutive lines sit ItemSpacing.y apart
+                // (well beyond the glyphs' own ascent/descent), and a fixed small pad left a strip of window background showing as a seam.
+                float padY = ImGui::GetStyle().ItemSpacing.y * 0.5f;
+                float rightX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                dl->AddRectFilled(ImVec2(min.x - 4.0f, min.y - padY), ImVec2(rightX, max.y + padY), col);
+                m_codeBandRowY = min.y;
+            }
         }
         else
         {
