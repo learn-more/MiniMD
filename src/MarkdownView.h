@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,25 @@ public:
 
     void Render();
 
+    enum class FontFamily { Inter, NotoSans };
+
+    // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), all built
+    // once in main.cpp after the font atlas exists. get_font() picks the heading entry by
+    // m_hlevel; a null entry (or index out of range) falls back to whichever font is current
+    // (i.e. the body font - see get_font()).
+    struct FontSet
+    {
+        ImFont* body = nullptr;
+        std::array<ImFont*, 6> headings{};
+    };
+
+    // One FontSet per FontFamily value, handed in once at startup. Also applies the current
+    // (default) family immediately - see ApplyFontFamily().
+    void SetFonts(const std::array<FontSet, 2>& fonts) { m_fontSets = fonts; ApplyFontFamily(); }
+
+    FontFamily GetFontFamily() const { return m_fontFamily; }
+    void SetFontFamily(FontFamily family) { m_fontFamily = family; ApplyFontFamily(); }
+
     // Window title text - "MiniMD - <loaded path>", or a fallback when nothing's loaded. main.cpp
     // polls this once per frame and only calls glfwSetWindowTitle() when it actually changes.
     std::string GetWindowTitle() const;
@@ -37,6 +57,14 @@ protected:
 private:
     std::string m_markdownText;
     std::string m_currentPath;
+    std::array<ImFont*, 6> m_headingFonts{};
+
+    // Fonts for both families, as handed in via SetFonts(). m_fontFamily picks which one is
+    // active; ApplyFontFamily() copies its headings into m_headingFonts and points io.FontDefault
+    // at its body font (body text has no per-run font of its own - see get_font()).
+    std::array<FontSet, 2> m_fontSets;
+    FontFamily m_fontFamily = FontFamily::Inter;
+    void ApplyFontFamily();
 
     // One entry per contiguous, already-wrapped chunk of literal text drawn by the last Render()
     // call. [begin,end) point directly into m_markdownText - see text_run(). Used both for

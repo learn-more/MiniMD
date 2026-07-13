@@ -10,3 +10,4 @@ Makefile
 obj/
 .vscode/
 src/imgui.ini
+imgui.ini

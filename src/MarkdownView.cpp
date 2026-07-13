@@ -124,9 +124,20 @@ MarkdownView::MarkdownView()
     LoadRecentFiles();
 }
 
+void MarkdownView::ApplyFontFamily()
+{
+    const FontSet& set = m_fontSets[static_cast<size_t>(m_fontFamily)];
+    m_headingFonts = set.headings;
+
+    // Body text has no per-run font of its own (get_font() returns nullptr outside headings, which PushFont() takes to mean "whatever's current") - so the body font is swapped in via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the document.
+    ImGui::GetIO().FontDefault = set.body;
+}
+
 ImFont* MarkdownView::get_font() const
 {
-    // No custom fonts loaded (yet) - default font for everything. imgui_md still tracks m_hlevel / m_is_strong / m_is_table_header as it parses, so plugging in real heading/bold ImFont*s here later (per the mekhontsev/imgui_md README example) is enough to make headings look like headings without touching anything else.
+    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Fonts are built once in main.cpp and handed in via SetFonts()/ApplyFontFamily() - index/null-check here so a missing font (atlas build failed, etc.) just falls back to the default rather than dereferencing null.
+    if (m_hlevel >= 1 && m_hlevel <= m_headingFonts.size() && m_headingFonts[m_hlevel - 1])
+        return m_headingFonts[m_hlevel - 1];
     return nullptr;
 }
 
@@ -553,6 +564,12 @@ void MarkdownView::RenderContextMenu()
                 ZoomOut();
             if (ImGui::MenuItem("Reset Zoom", "Ctrl+0"))
                 ResetZoom();
+
+            ImGui::Separator();
+            if (ImGui::MenuItem("Inter", nullptr, m_fontFamily == FontFamily::Inter))
+                SetFontFamily(FontFamily::Inter);
+            if (ImGui::MenuItem("Noto Sans", nullptr, m_fontFamily == FontFamily::NotoSans))
+                SetFontFamily(FontFamily::NotoSans);
             ImGui::EndMenu();
         }
 

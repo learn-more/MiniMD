@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdio>
 #include <string>
 
@@ -14,6 +15,8 @@
 
 #include "MarkdownView.h"
 #include "res/icon_data.h"
+#include "res/font_inter_data.h"
+#include "res/font_notosans_data.h"
 
 // We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is silently discarded.
 // Send diagnostics to the debugger (visible in VS's Output window / DebugView) and, for anything fatal, pop a message box since the user has no other way to see why the app didn't start.
@@ -87,10 +90,29 @@ int main(int argc, char** argv)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
 
+    // Body + one larger font per heading level, baked at fixed pixel sizes (rather than relying on ImGui's own scaling) so text stays crisp - see MarkdownView::ZoomIn/Out for the separate FontGlobalScale-based zoom that stretches these at render time. Both families are loaded into the one atlas up front so switching between them (see MarkdownView::SetFontFamily) is just swapping which already-built ImFont*s are in use, no atlas rebuild needed.
+    static const float kBodySize = 16.0f;
+    static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
+
+    auto loadFontSet = [&](const char* compressedBase85) -> MarkdownView::FontSet
+    {
+        MarkdownView::FontSet set;
+        set.body = io.Fonts->AddFontFromMemoryCompressedBase85TTF(compressedBase85, kBodySize);
+        for (size_t i = 0; i < set.headings.size(); ++i)
+            set.headings[i] = io.Fonts->AddFontFromMemoryCompressedBase85TTF(compressedBase85, kHeadingSizes[i]);
+        return set;
+    };
+
+    std::array<MarkdownView::FontSet, 2> fontSets{
+        loadFontSet(AppFonts::kInterCompressedDataBase85),
+        loadFontSet(AppFonts::kNotoSansCompressedDataBase85),
+    };
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     MarkdownView view;
+    view.SetFonts(fontSets);
     glfwSetWindowUserPointer(window, &view);
     glfwSetDropCallback(window, DropCallback);
 

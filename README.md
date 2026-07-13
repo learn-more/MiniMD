@@ -75,7 +75,7 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
 ## Known limitations / next steps
 
 - No native "Open File" dialog and no path-entry box - a file's opened by dragging it in, passing it as argv[1], or picking it from Recent Files. Adding a dialog (e.g. nativefiledialog-extended) would be the next vendor addition.
-- No custom fonts - `MarkdownView::get_font()` always returns the default font, so headings/bold text don't actually look bigger or bolder even though imgui_md tracks heading level/bold state as it parses. Wiring up real `ImFont*`s per level (see `vendor/imgui_md/README.md`'s example) is the next step.
+- Headings scale by level (`MarkdownView::get_font()` picks from six sizes baked from the default font at startup, see `main.cpp`), but bold text doesn't actually render bolder - there's no separate bold font asset, so `m_is_strong` isn't reflected in `get_font()` yet.
 - No image loading - `MarkdownView::get_image()` returns false, so `![...]` images are skipped rather than shown as a placeholder.
 - Code blocks/spans render as plain text, not monospace - imgui_md doesn't swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*` wired in similarly to headings.
 - Table cell alignment is whatever imgui_md defaults to (left-aligned, header row highlighted) - column alignment markers (`:--`, `--:`) in the source aren't applied to layout.
