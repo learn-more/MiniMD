@@ -21,20 +21,13 @@ public:
 
     void Render();
 
-    // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), all built once in main.cpp after the font atlas exists.
-    // get_font() picks the heading entry by m_hlevel, then the bold/italic/bold-italic variant of whichever that is by m_is_strong/m_is_em; a null
-    // entry (or index out of range) falls back to whichever font is current (i.e. the body font - see get_font()).
-    struct Weights
-    {
-        ImFont* regular = nullptr;
-        ImFont* bold = nullptr;
-        ImFont* italic = nullptr;
-        ImFont* boldItalic = nullptr;
-    };
+    // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), all built once in main.cpp after the font atlas exists. Only
+    // one weight is embedded per size - **bold** and *italic* spans reuse these same glyphs and get faked at render time instead (see
+    // vendor/imgui_md's render_text()), rather than baking 3 more weights just for occasional emphasis in a markdown viewer.
     struct FontSet
     {
-        Weights body;
-        std::array<Weights, 6> headings{};
+        ImFont* body = nullptr;
+        std::array<ImFont*, 6> headings{};
     };
 
     // Handed in once at startup, after the fonts are built into the atlas in main.cpp.
@@ -60,8 +53,8 @@ private:
     std::string m_currentPath;
     // Directory m_currentPath lives in - relative image paths resolve against this, see ResolveImagePath().
     std::string m_currentDir;
-    std::array<Weights, 6> m_headingFonts{};
-    Weights m_bodyFont;
+    std::array<ImFont*, 6> m_headingFonts{};
+    ImFont* m_bodyFont = nullptr;
 
     // One entry per contiguous, already-wrapped chunk of literal text drawn by the last Render() call. [begin,end) point directly into
     // m_markdownText - see text_run(). Used both for hit-testing mouse clicks/drags into a character offset, and for reconstructing the selected

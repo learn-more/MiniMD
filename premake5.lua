@@ -17,7 +17,8 @@ workspace "MiniMD"
     filter "configurations:Release"
         defines { "NDEBUG" }
         runtime "Release"
-        optimize "on"
+        optimize "size"
+        linktimeoptimization "on"
 
     filter {}
 

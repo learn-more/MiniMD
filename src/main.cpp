@@ -93,30 +93,19 @@ int main(int argc, char** argv)
     static const float kBodySize = 16.0f;
     static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
 
-    // One compressed TTF blob per weight/style - regular, bold, italic, bold-italic - each baked at every size (body + 6 headings) so **bold** and
-    // *italic* spans get a real font instead of just reusing the regular glyphs (see MarkdownView::get_font()).
-    auto loadWeights = [&](const char* regular, const char* bold, const char* italic, const char* boldItalic, float size) -> MarkdownView::Weights
-    {
-        MarkdownView::Weights w;
-        w.regular = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, size);
-        w.bold = io.Fonts->AddFontFromMemoryCompressedBase85TTF(bold, size);
-        w.italic = io.Fonts->AddFontFromMemoryCompressedBase85TTF(italic, size);
-        w.boldItalic = io.Fonts->AddFontFromMemoryCompressedBase85TTF(boldItalic, size);
-        return w;
-    };
-
-    auto loadFontSet = [&](const char* regular, const char* bold, const char* italic, const char* boldItalic) -> MarkdownView::FontSet
+    // Only the regular weight is embedded (baked at every size - body + 6 headings). **bold** and *italic* spans reuse these same glyphs and get
+    // faked at render time instead - see vendor/imgui_md's render_text() (double-draw smear for bold, baseline shear for italic) - rather than
+    // shipping 3 more ~330KB weights just for occasional emphasis in a markdown viewer.
+    auto loadFontSet = [&](const char* regular) -> MarkdownView::FontSet
     {
         MarkdownView::FontSet set;
-        set.body = loadWeights(regular, bold, italic, boldItalic, kBodySize);
+        set.body = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, kBodySize);
         for (size_t i = 0; i < set.headings.size(); ++i)
-            set.headings[i] = loadWeights(regular, bold, italic, boldItalic, kHeadingSizes[i]);
+            set.headings[i] = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, kHeadingSizes[i]);
         return set;
     };
 
-    MarkdownView::FontSet fontSet = loadFontSet(
-        AppFonts::kInterRegularCompressedDataBase85, AppFonts::kInterBoldCompressedDataBase85,
-        AppFonts::kInterItalicCompressedDataBase85, AppFonts::kInterBoldItalicCompressedDataBase85);
+    MarkdownView::FontSet fontSet = loadFontSet(AppFonts::kInterRegularCompressedDataBase85);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);

@@ -1,11 +1,14 @@
 """Regenerates src/res/font_*_data.h headers from local TTF files.
 
 Run with `uv run tools/make_fonts.py` from the repo root after downloading a fresh copy of:
-  - Inter Regular/Bold/Italic/BoldItalic (static, not the variable font):
-    https://github.com/rsms/inter/releases -> extras/ttf/Inter-{Regular,Bold,Italic,BoldItalic}.ttf
+  - Inter Regular (static, not the variable font):
+    https://github.com/rsms/inter/releases -> extras/ttf/Inter-Regular.ttf
 It's SIL OFL 1.1 - copy the release's OFL.txt over src/res/font_inter_LICENSE.txt too if it changed.
 
-Place the .ttf files next to this script (or pass paths on the command line) before running.
+Only the regular weight is embedded - bold/italic are faked at render time (double-draw smear /
+baseline shear, see vendor/imgui_md's render_text()) rather than shipping 3 more ~330KB weights.
+
+Place the .ttf file next to this script (or pass its path on the command line) before running.
 
 This shells out to cl.exe/g++/clang++ to build vendor/imgui/misc/fonts/binary_to_compressed_c.cpp
 (same tool imgui itself recommends for embedding fonts) and runs it with -base85, which is what
@@ -26,9 +29,6 @@ B2C_SRC = os.path.join(REPO_ROOT, "vendor", "imgui", "misc", "fonts", "binary_to
 WEIGHTS = [
     # (ttf filename suffix, b2c symbol suffix, C++ constant name suffix)
     ("Regular", "Regular", "Regular"),
-    ("Bold", "Bold", "Bold"),
-    ("Italic", "Italic", "Italic"),
-    ("BoldItalic", "BoldItalic", "BoldItalic"),
 ]
 
 FAMILIES = [
