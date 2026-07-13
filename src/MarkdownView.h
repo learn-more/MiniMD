@@ -47,6 +47,10 @@ protected:
     bool get_image(image_info& nfo) const override;
     void open_url() const override;
     void text_run(const char* str, const char* str_end, const ImVec2& min, const ImVec2& max) override;
+    bool render_entity(const char* str, const char* str_end) override;
+    void BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e) override;
+    void SPAN_CODE(bool e) override;
+    void BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e) override;
 
 private:
     std::string m_markdownText;
@@ -55,6 +59,18 @@ private:
     std::string m_currentDir;
     std::array<ImFont*, 6> m_headingFonts{};
     ImFont* m_bodyFont = nullptr;
+
+    // Set for the duration of a fenced/indented code block - distinguishes a code *block* line (full-width, square-cornered background band,
+    // see text_run()) from an inline code *span* (tight rounded pill) sharing the same underlying m_is_code flag. No monospace font is swapped
+    // in for either - see BLOCK_CODE()/SPAN_CODE() in the .cpp for why.
+    bool m_inCodeBlock = false;
+
+    // Table cell alignment (":---"/"---:"/":-:" column specs). Real ImGui tables auto-fit column width to content and
+    // don't expose a per-cell content-alignment flag, so BLOCK_TD() shifts the cell's already-drawn vertices left/
+    // right afterward instead - see its definition in the .cpp for the full explanation. Reset per cell in BLOCK_TD().
+    MD_ALIGN m_cellAlign = MD_ALIGN_DEFAULT;
+    float m_cellColWidth = 0.0f;
+    int m_cellVtxStart = 0;
 
     // One entry per contiguous, already-wrapped chunk of literal text drawn by the last Render() call. [begin,end) point directly into
     // m_markdownText - see text_run(). Used both for hit-testing mouse clicks/drags into a character offset, and for reconstructing the selected
@@ -65,6 +81,12 @@ private:
         const char* end;
         ImVec2 min;
         ImVec2 max;
+        // Font/size this run was actually drawn with (headings use a larger font than body text - see get_font()). HitTest() runs before
+        // print() each frame (see Render()), so by the time it needs to re-measure glyph widths the real per-run font is long since popped off
+        // ImGui's font stack - CalcTextSize() at that point would silently measure with whatever font happens to be current instead, which is
+        // wrong for any run drawn in a non-default font. Recorded per run here so HitTest() can measure with ImFont::CalcTextSizeA() instead.
+        ImFont* font;
+        float fontSize;
     };
     std::vector<TextRun> m_runs;        // committed at the end of the previous Render() call
     std::vector<TextRun> m_pendingRuns; // filled *during* the current Render()/print() call

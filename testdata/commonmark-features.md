@@ -92,7 +92,7 @@ Ordered list where the numbers in the source don't count up (CommonMark renumber
 1. Second
 1. Third
 
-GFM task list (MD4C's task-list extension isn't enabled here, so this is expected to render as a plain list item containing the literal text "[ ]"/"[x]", not a checkbox):
+GFM task list (task-list extension is enabled, so these should render as checkbox glyphs, unchecked/checked):
 
 - [ ] Unchecked task
 - [x] Checked task
@@ -116,6 +116,8 @@ ___
 Reference-style link: [Dear ImGui][imgui-ref], defined at the bottom of the document.
 
 Autolink: <https://github.com/ocornut/imgui>
+
+Permissive (bare, no angle brackets) autolinks: https://github.com/mity/md4c, www.github.com, and someone@example.com should all render as clickable links.
 
 [imgui-ref]: https://github.com/ocornut/imgui "Dear ImGui"
 
@@ -153,7 +155,7 @@ Column A | Column B | Column C
 short | a somewhat longer cell | 3
 **bold cell** | ~~strikethrough cell~~ | `code cell`
 
-Explicit alignment (left / center / right) - imgui_md's README lists per-column alignment as not applied to layout, so all columns are expected to render left-aligned regardless of the `:---`/`:--:`/`---:` markers below:
+Explicit alignment (left / center / right) - each column should now render left/center/right-aligned per the `:---`/`:--:`/`---:` markers below:
 
 Left | Center | Right
 :----|:------:|-----:
@@ -172,6 +174,8 @@ Underline via HTML tag: <u>this text is underlined</u>, back to normal.
 
 Non-breaking space via entity: one&nbsp;&nbsp;&nbsp;&nbsp;two (four non-breaking spaces between "one" and "two").
 
+Other character references - named (&copy; &mdash; &hellip; &rarr;), decimal (&#169;), and hex (&#x2192;) - should all decode to their actual characters, not show up as literal `&...;` text.
+
 `<div>` with a class, in case a subclass overrides `html_div()` to do something with it:
 
 <div class="red">
@@ -179,6 +183,8 @@ Non-breaking space via entity: one&nbsp;&nbsp;&nbsp;&nbsp;two (four non-breaking
 Text inside a `<div class="red">...</div>` block.
 
 </div>
+
+An unrecognized raw HTML tag, which MiniMD can't render (no HTML engine) and should now be dropped rather than shown as literal tag text: some <span class="unsupported">inline HTML</span> here.
 
 ## Backslash escapes
 
@@ -192,6 +198,6 @@ Inside emphasis: **🎉 bold with emoji**, *🚀 italic with emoji*, ~~❌ strik
 
 ## Images
 
-See `images-local.md` and `images-local-remote.md` for image-specific test cases (MiniMD currently has no image loading implemented - `MarkdownView::get_image()` returns `false` - so images are expected to be skipped entirely rather than shown as broken-image placeholders).
+See `images-local.md` and `images-local-remote.md` for image-specific test cases. Local images load via stb_image; remote (`http(s)://`) references are unsupported (no network code) and fall back to rendering their alt text as a link instead of showing nothing.
 
 A single inline image reference for completeness: ![a small red square](images/local-red.png "local test image")

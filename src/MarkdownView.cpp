@@ -123,6 +123,59 @@ namespace
 }
 #endif
 
+namespace
+{
+    // Encodes one Unicode codepoint as UTF-8 into out[0..4) and returns the byte length written. Used by render_entity() below - ImGui text
+    // functions all expect UTF-8, but decoded entities/numeric character references start out as a single codepoint.
+    int EncodeUtf8(unsigned cp, char out[4])
+    {
+        if (cp <= 0x7F)
+        {
+            out[0] = (char)cp;
+            return 1;
+        }
+        if (cp <= 0x7FF)
+        {
+            out[0] = (char)(0xC0 | (cp >> 6));
+            out[1] = (char)(0x80 | (cp & 0x3F));
+            return 2;
+        }
+        if (cp <= 0xFFFF)
+        {
+            out[0] = (char)(0xE0 | (cp >> 12));
+            out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[2] = (char)(0x80 | (cp & 0x3F));
+            return 3;
+        }
+        out[0] = (char)(0xF0 | (cp >> 18));
+        out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+
+    struct NamedEntity
+    {
+        const char* name;
+        unsigned codepoint;
+    };
+
+    // Not the full ~2100-entry HTML5 named character reference table - just CommonMark's own required &amp;/&lt;/
+    // &gt;/&quot;/&apos; plus the handful of others (punctuation, arrows, currency) likely to actually show up typed
+    // literally in someone's markdown source. Anything else falls through to the numeric-reference path below, or is
+    // left as literal text if it's neither.
+    constexpr NamedEntity kNamedEntities[] = {
+        {"amp", '&'},      {"lt", '<'},        {"gt", '>'},        {"quot", '"'},      {"apos", '\''},
+        {"nbsp", 0xA0},    {"copy", 0xA9},     {"reg", 0xAE},      {"trade", 0x2122},  {"mdash", 0x2014},
+        {"ndash", 0x2013}, {"hellip", 0x2026}, {"ldquo", 0x201C},  {"rdquo", 0x201D},  {"lsquo", 0x2018},
+        {"rsquo", 0x2019}, {"deg", 0xB0},      {"plusmn", 0xB1},   {"times", 0xD7},    {"divide", 0xF7},
+        {"euro", 0x20AC},  {"pound", 0xA3},    {"yen", 0xA5},      {"cent", 0xA2},     {"sect", 0xA7},
+        {"para", 0xB6},    {"middot", 0xB7},   {"laquo", 0xAB},    {"raquo", 0xBB},    {"larr", 0x2190},
+        {"rarr", 0x2192},  {"uarr", 0x2191},   {"darr", 0x2193},   {"harr", 0x2194},   {"bull", 0x2022},
+        {"dagger", 0x2020},{"Dagger", 0x2021},
+    };
+}
+
 MarkdownView::MarkdownView()
 {
     LoadRecentFiles();
@@ -150,6 +203,140 @@ ImFont* MarkdownView::get_font() const
     // falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault, set in SetFonts()) alone.
     bool inHeading = m_hlevel >= 1 && m_hlevel <= m_headingFonts.size();
     return inHeading ? m_headingFonts[m_hlevel - 1] : nullptr;
+}
+
+// No monospace font is embedded (only Inter Regular, at body + heading sizes - see tools/make_fonts.py) and this app
+// deliberately doesn't add one just for code: two prior commits went the other way, dropping an already-embedded
+// weight and faking bold/italic instead of baking dedicated glyphs, specifically to keep the exe small. So code is
+// distinguished purely by a background band drawn in text_run() instead of by typeface - see there.
+void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
+{
+    if (e)
+    {
+        ImGui::NewLine();
+        if (d->lang.size > 0)
+            ImGui::TextDisabled("%.*s", (int)d->lang.size, d->lang.text);
+        ImGui::Indent();
+    }
+
+    m_is_code = e;
+    m_inCodeBlock = e;
+
+    if (!e)
+    {
+        ImGui::Unindent();
+        ImGui::NewLine();
+    }
+}
+
+void MarkdownView::SPAN_CODE(bool e)
+{
+    m_is_code = e;
+}
+
+// Real ImGui tables (ImGuiTableFlags_SizingFixedFit, see BLOCK_TABLE()) auto-fit each column's width to its content and don't expose a
+// per-cell content-alignment flag - TableSetupColumn()'s flags control sorting/resizing, not where text sits within the cell. Column setup
+// also has to happen before the first TableNextRow(), which the base class already calls in BLOCK_TR() before per-cell detail (and therefore
+// alignment) is even known. So instead of fighting the table API, this shifts the cell's own already-drawn vertices left/right after the fact:
+// capture the vertex-buffer range this cell's content lands in, then on leave, measure its actual drawn width from that range's bounding box
+// and nudge every vertex in it by however much slack is left in the (already-known, previously-fit) column width - the same "grab the
+// vertices just emitted and move them" trick render_text() uses for italics.
+void MarkdownView::BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e)
+{
+    if (e)
+    {
+        ImGui::TableNextColumn();
+        m_cellAlign = d ? d->align : MD_ALIGN_DEFAULT;
+        m_cellColWidth = ImGui::GetContentRegionAvail().x;
+        m_cellVtxStart = ImGui::GetWindowDrawList()->VtxBuffer.Size;
+        return;
+    }
+
+    if (m_cellAlign != MD_ALIGN_CENTER && m_cellAlign != MD_ALIGN_RIGHT)
+        return;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    int vtxEnd = dl->VtxBuffer.Size;
+    if (vtxEnd <= m_cellVtxStart)
+        return; // empty cell - nothing to shift
+
+    // Plain comparisons, not std::min/max - Windows.h's own min/max macros (still in scope, see the includes at the
+    // top of this file) would shadow the std:: names right here otherwise.
+    float minX = FLT_MAX, maxX = -FLT_MAX;
+    for (int i = m_cellVtxStart; i < vtxEnd; ++i)
+    {
+        float x = dl->VtxBuffer[i].pos.x;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+    }
+
+    float slack = m_cellColWidth - (maxX - minX);
+    if (slack <= 0.0f)
+        return; // this cell is (one of) the widest in its column - no room to shift
+
+    float shift = m_cellAlign == MD_ALIGN_CENTER ? slack * 0.5f : slack;
+    for (int i = m_cellVtxStart; i < vtxEnd; ++i)
+        dl->VtxBuffer[i].pos.x += shift;
+}
+
+// The base class (vendor/imgui_md) only special-cases "&nbsp;" and leaves every other character reference - named
+// ("&copy;"), decimal ("&#169;") or hex ("&#xA9;") - as literal, un-decoded text. This overrides it entirely (rather
+// than extending the base version) to also resolve numeric references generically and a modest table of common named
+// ones; anything still unrecognized falls back to literal text same as before, via the `return false` path in text().
+bool MarkdownView::render_entity(const char* str, const char* str_end)
+{
+    size_t len = str_end - str;
+    if (len < 3 || str[0] != '&' || str[len - 1] != ';')
+        return false;
+
+    unsigned cp = 0;
+    if (str[1] == '#')
+    {
+        bool hex = len > 3 && (str[2] == 'x' || str[2] == 'X');
+        const char* digits = str + (hex ? 3 : 2);
+        const char* digitsEnd = str_end - 1;
+        if (digits >= digitsEnd)
+            return false;
+
+        for (const char* p = digits; p < digitsEnd; ++p)
+        {
+            char c = *p;
+            int v;
+            if (c >= '0' && c <= '9')
+                v = c - '0';
+            else if (hex && c >= 'a' && c <= 'f')
+                v = c - 'a' + 10;
+            else if (hex && c >= 'A' && c <= 'F')
+                v = c - 'A' + 10;
+            else
+                return false;
+            cp = cp * (hex ? 16u : 10u) + (unsigned)v;
+        }
+        if (cp == 0 || cp > 0x10FFFF)
+            cp = 0xFFFD; // U+FFFD replacement character, for a null or out-of-range reference
+    }
+    else
+    {
+        std::string name(str + 1, len - 2);
+        bool found = false;
+        for (const NamedEntity& entity : kNamedEntities)
+        {
+            if (name == entity.name)
+            {
+                cp = entity.codepoint;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
+    }
+
+    char utf8[4];
+    int n = EncodeUtf8(cp, utf8);
+    ImGui::TextUnformatted(utf8, utf8 + n);
+    ImGui::SameLine(0.0f, 0.0f);
+    return true;
 }
 
 // m_href isn't a filesystem path as-is: it's whatever's between (parens) in the markdown, so relative references (the common case) need resolving
@@ -385,7 +572,25 @@ bool MarkdownView::HasSelection() const
 
 void MarkdownView::text_run(const char* str, const char* str_end, const ImVec2& min, const ImVec2& max)
 {
-    m_pendingRuns.push_back({ str, str_end, min, max });
+    m_pendingRuns.push_back({ str, str_end, min, max, ImGui::GetFont(), ImGui::GetFontSize() });
+
+    // Code spans/blocks get no dedicated monospace font (see BLOCK_CODE()) - a background band behind the glyphs is the only visual cue that
+    // this text is code, so draw it here, before the glyphs land on top of it. Block code gets a full-width, square-cornered band per wrapped
+    // line (m_inCodeBlock); an inline code span gets a tight, rounded pill hugging just its own text.
+    if (m_is_code)
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImU32 col = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        if (m_inCodeBlock)
+        {
+            float rightX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+            dl->AddRectFilled(ImVec2(min.x - 4.0f, min.y - 1.0f), ImVec2(rightX, max.y + 1.0f), col);
+        }
+        else
+        {
+            dl->AddRectFilled(ImVec2(min.x - 2.0f, min.y - 1.0f), ImVec2(max.x + 2.0f, max.y + 1.0f), col, 3.0f);
+        }
+    }
 
     if (!HasSelection())
         return;
@@ -447,7 +652,7 @@ const char* MarkdownView::HitTest(const ImVec2& screenPos) const
         while (next < best->end && (*next & 0xC0) == 0x80)
             ++next;
 
-        float x = best->min.x + ImGui::CalcTextSize(best->begin, next).x;
+        float x = best->min.x + best->font->CalcTextSizeA(best->fontSize, FLT_MAX, 0.0f, best->begin, next).x;
         float mid = (prevX + x) * 0.5f;
         if (screenPos.x < mid)
             return prevBoundary;
