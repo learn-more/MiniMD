@@ -12,13 +12,21 @@
     #include <Windows.h>
     #include <shellapi.h>
     #include <shlobj.h>
+    #include <GL/gl.h>
 #elif defined(__linux__)
     #include <sys/stat.h>
     #include <climits>
+    #include <GL/gl.h>
     #if defined(DEBUG)
         #include <unistd.h>
     #endif
 #endif
+
+// Local-only image decode for get_image() - no network code, so http(s):// references in markdown
+// are left unsupported and silently skipped (get_image() checks for "://" before ever touching
+// the filesystem). This is the one translation unit that compiles stb_image's implementation.
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 namespace
 {
@@ -124,6 +132,11 @@ MarkdownView::MarkdownView()
     LoadRecentFiles();
 }
 
+MarkdownView::~MarkdownView()
+{
+    ClearImageCache();
+}
+
 void MarkdownView::ApplyFontFamily()
 {
     const FontSet& set = m_fontSets[static_cast<size_t>(m_fontFamily)];
@@ -163,11 +176,81 @@ ImFont* MarkdownView::get_font() const
     return inHeading ? set.regular : nullptr;
 }
 
+// m_href isn't a filesystem path as-is: it's whatever's between (parens) in the markdown, so
+// relative references (the common case) need resolving against the loaded file's own directory,
+// not the process's current working directory (which could be anything - see LoadFile()).
+std::string MarkdownView::ResolveImagePath(const std::string& href) const
+{
+    bool isAbsolute = !href.empty() &&
+        (href[0] == '/' || href[0] == '\\' || (href.size() > 1 && href[1] == ':'));
+    if (isAbsolute || m_currentDir.empty())
+        return href;
+    return m_currentDir + "/" + href;
+}
+
+MarkdownView::CachedImage MarkdownView::LoadImageFile(const std::string& path) const
+{
+    int width = 0, height = 0, channels = 0;
+    // Force 4 components (RGBA) regardless of source format so the GL upload below never has to
+    // branch on channel count.
+    unsigned char* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (!pixels)
+        return CachedImage{}; // valid=false - bad path, unsupported format, corrupt file, etc.
+
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(pixels);
+
+    return CachedImage{ texture, width, height, true };
+}
+
+void MarkdownView::ClearImageCache()
+{
+    for (const auto& [path, img] : m_imageCache)
+    {
+        (void)path;
+        if (img.valid)
+        {
+            GLuint texture = img.texture;
+            glDeleteTextures(1, &texture);
+        }
+    }
+    m_imageCache.clear();
+}
+
 bool MarkdownView::get_image(image_info& nfo) const
 {
-    // No image loading yet - returning false skips the image entirely rather than drawing a placeholder.
-    (void)nfo;
-    return false;
+    if (m_href.empty())
+        return false;
+
+    // No network code in this app - a remote reference just falls through to "couldn't load",
+    // same as a relative path that doesn't resolve to anything.
+    if (m_href.find("://") != std::string::npos)
+        return false;
+
+    std::string path = ResolveImagePath(m_href);
+
+    auto it = m_imageCache.find(path);
+    if (it == m_imageCache.end())
+        it = m_imageCache.emplace(path, LoadImageFile(path)).first;
+
+    const CachedImage& img = it->second;
+    if (!img.valid)
+        return false;
+
+    nfo.texture_id = (ImTextureID)(intptr_t)img.texture;
+    nfo.size = ImVec2((float)img.width, (float)img.height);
+    nfo.uv0 = ImVec2(0.0f, 0.0f);
+    nfo.uv1 = ImVec2(1.0f, 1.0f);
+    nfo.col_tint = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    nfo.col_border = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    return true;
 }
 
 void MarkdownView::open_url() const
@@ -185,11 +268,16 @@ void MarkdownView::open_url() const
 
 void MarkdownView::LoadFile(const std::string& path)
 {
+    // Old images are resolved against the *previous* file's directory - drop them before anything
+    // else, whether or not this load actually succeeds.
+    ClearImageCache();
+
     std::ifstream file(path, std::ios::binary);
     if (!file)
     {
         m_markdownText = "**Error:** could not open file `" + path + "`";
         m_currentPath.clear();
+        m_currentDir.clear();
         m_scrollToTop = true;
         ResetSelection();
         return;
@@ -199,6 +287,8 @@ void MarkdownView::LoadFile(const std::string& path)
     ss << file.rdbuf();
     m_markdownText = ss.str();
     m_currentPath = path;
+    size_t slash = path.find_last_of("\\/");
+    m_currentDir = slash == std::string::npos ? std::string() : path.substr(0, slash);
     AddRecentFile(path);
 
     m_scrollToTop = true;
@@ -207,6 +297,8 @@ void MarkdownView::LoadFile(const std::string& path)
 
 void MarkdownView::LoadDefaultSample()
 {
+    ClearImageCache();
+    m_currentDir.clear();
     m_markdownText =
         "# MiniMD\n\n"
         "A lightweight markdown viewer built with **Dear ImGui**, using "
@@ -218,11 +310,13 @@ void MarkdownView::LoadDefaultSample()
         "### Supported\n\n"
         "Feature (what's supported) | Works\n"
         "---|---\n"
-        "Headings + emphasis | yes\n"
+        "Headings + **bold**/*italic* | yes\n"
         "Ordered / unordered lists | yes\n"
+        "Blockquotes | yes\n"
         "Strikethrough + underline | yes\n"
         "Inline code spans | yes\n"
-        "Tables (this one) | yes\n\n"
+        "Tables (this one) | yes\n"
+        "Local images | yes\n\n"
         "Links: [Dear ImGui](https://github.com/ocornut/imgui), "
         "[MD4C](https://github.com/mity/md4c), "
         "[imgui_md](https://github.com/mekhontsev/imgui_md)\n";

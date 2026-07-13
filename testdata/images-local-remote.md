@@ -1,6 +1,6 @@
 # Local + remote images
 
-Mix of local relative-path images and remote http(s) URLs, to exercise both once image loading exists. Same caveat as `images-local.md`: with no image loader wired up yet, every one of these is expected to be silently skipped rather than shown.
+Mix of local relative-path images and remote http(s) URLs. MiniMD's image loader is local-only - no network code - so the local ones below should display and every `http(s)://` reference is expected to be silently skipped rather than shown (same as a broken path - see `images-local.md`).
 
 ## Local image
 

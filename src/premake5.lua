@@ -21,6 +21,7 @@ project "MiniMD"
         "../vendor/imgui_md",
         "../vendor/md4c/src",
         "../vendor/glfw/include",
+        "../vendor/stb",
     }
 
     links { "ImGui", "GLFW", "ImGuiMd" }

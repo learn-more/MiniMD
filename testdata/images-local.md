@@ -1,6 +1,6 @@
 # Local images
 
-Image references using paths relative to this file, in two different formats. MiniMD currently has no image loading implemented (`MarkdownView::get_image()` always returns `false`), so all of these are expected to be skipped entirely - no broken-image placeholder, no crash, just no image drawn - rather than actually displaying anything.
+Image references using paths relative to this file, in two different formats. MiniMD loads local images (`MarkdownView::get_image()` resolves the path against this file's directory and decodes it via stb_image), so all but the last of these should actually display. The last one is a deliberately broken path - no broken-image placeholder, no crash, just no image drawn.
 
 ## PNG, no title
 

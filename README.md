@@ -5,7 +5,7 @@ A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake
 ## Why this stack
 
 - **GLFW + OpenGL3** is the lightest, most portable windowing/renderer combo Dear ImGui supports: no platform SDK dependency (unlike a Win32+DX11 backend), no extra runtime weight (unlike SDL), and OpenGL3 needs no shader/pipeline setup of its own - ImGui's backend handles that internally.
-- **imgui_md + MD4C** (mekhontsev/imgui_md on top of mity/md4c) renders actual CommonMark/GFM: tables, ordered lists, strikethrough, underline, fenced code, basic inline HTML - not just a pseudo-markdown subset. MD4C does the parsing (small, dependency-free C parser); imgui_md turns its parse callbacks into ImGui draw calls.
+- **imgui_md + MD4C** (mekhontsev/imgui_md on top of mity/md4c) renders actual CommonMark/GFM: tables, ordered lists, blockquotes, bold/italic, strikethrough, underline, fenced code, local images - not just a pseudo-markdown subset. MD4C does the parsing (small, dependency-free C parser); imgui_md turns its parse callbacks into ImGui draw calls.
 
 ## Layout
 
@@ -15,7 +15,7 @@ premake/imgui.lua        builds vendor/imgui as a static lib
 premake/glfw.lua         builds vendor/glfw as a static lib
 premake/imgui_md.lua     builds vendor/imgui_md + vendor/md4c as a static lib
 src/                     the app itself (MiniMD project)
-vendor/                  submodules (see vendor/README.md)
+vendor/                  submodules + vendored single-header libs (see vendor/README.md)
 ```
 
 ## First-time setup
@@ -75,8 +75,7 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
 ## Known limitations / next steps
 
 - No native "Open File" dialog and no path-entry box - a file's opened by dragging it in, passing it as argv[1], or picking it from Recent Files. Adding a dialog (e.g. nativefiledialog-extended) would be the next vendor addition.
-- Headings scale by level (`MarkdownView::get_font()` picks from six sizes baked from the default font at startup, see `main.cpp`), but bold text doesn't actually render bolder - there's no separate bold font asset, so `m_is_strong` isn't reflected in `get_font()` yet.
-- No image loading - `MarkdownView::get_image()` returns false, so `![...]` images are skipped rather than shown as a placeholder.
+- No remote image loading - `MarkdownView::get_image()` only resolves and decodes local files (via stb_image); `http(s)://` references are silently skipped rather than fetched, same as a broken local path. There's no network code in this app.
 - Code blocks/spans render as plain text, not monospace - imgui_md doesn't swap fonts for `MD_TEXT_CODE` by default; would need a monospace `ImFont*` wired in similarly to headings.
 - Table cell alignment is whatever imgui_md defaults to (left-aligned, header row highlighted) - column alignment markers (`:--`, `--:`) in the source aren't applied to layout.
 - The GLFW premake script targets the pre-3.4 source layout (tag `3.3.9`). Bumping to GLFW 3.4+ requires updating `premake/glfw.lua`'s file list for the new platform-abstraction sources (`platform.c`, `null_*.c`).
@@ -84,7 +83,7 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
 
 ### Local patches to vendor/imgui_md
 
-`vendor/imgui_md` isn't pristine upstream - it has three local fixes on top of whatever commit the submodule points at. If you re-clone the submodule fresh from upstream, reapply all three (or better: commit them inside the submodule itself and push to your fork, so they travel with the pointer instead of living as an uncommitted diff):
+`vendor/imgui_md` isn't pristine upstream - it has four local fixes on top of whatever commit the submodule points at, committed inside the submodule itself so they travel with the pointer:
 
 1. **Compile fix**: `get_image()`'s default implementation assigns `ImFontAtlas::TexID` (now `ImTextureRef` since imgui 1.92) straight into an `ImTextureID` field, which won't compile against current imgui. Changed that line to `nfo.texture_id = ImGui::GetIO().Fonts->TexID.GetTexID();`
 
@@ -93,3 +92,5 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
    Getting there took two attempts. `SizingFixedFit` needs to see each cell's *true* content width to fit against, but `render_text()` word-wraps cell text before submitting it - originally to the column's own current width, which is circular (the column is still being sized *from* that same content) and gets stuck narrow forever. Fixed by capturing the surrounding page width in `BLOCK_TABLE` *before* the table starts, and having `render_text()` wrap table-cell text to that fixed, table-independent cap (`m_table_wrap_width`) instead of the live column width. That breaks the feedback loop while still capping any single absurdly long cell at the page width rather than blowing out the whole table.
 
 3. **`text_run()` hook, for click-drag text selection**: added a new protected virtual, `text_run(str, str_end, min, max)`, called from `render_text()` once per already-word-wrapped chunk, right before its glyphs are drawn (empty default implementation, so upstream behavior is unchanged unless something overrides it). `MarkdownView` overrides it to record `[str,str_end)` - which points directly into the buffer passed to `print()`, not a copy - together with its on-screen rect, into a per-frame list. That list is what makes rich-text selection possible without a parallel text representation: mouse hit-testing walks it to turn a click position into a byte offset, and copy-to-clipboard walks it again to slice the selected byte range straight out of the original document. The same hook doubles as the paint point for the selection highlight itself (drawn *before* the glyphs, matching the draw order ImGui's own `InputText` uses for its selection background).
+
+4. **Blockquote rendering**: the original `BLOCK_QUOTE` was an empty stub - `> quoted text` rendered as an indistinguishable, unindented paragraph. Implemented it to indent, dim the text (`ImGuiCol_TextDisabled`), and draw a left bar spanning the quote's full height once its content (and therefore bottom Y) is known - each nesting level gets its own bar, drawn at the midpoint of its own indent gutter, so nested blockquotes stack correctly.

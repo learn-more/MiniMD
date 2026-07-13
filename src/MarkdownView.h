@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "imgui.h"
@@ -14,6 +15,7 @@ class MarkdownView : public imgui_md
 {
 public:
     MarkdownView();
+    ~MarkdownView();
 
     void LoadFile(const std::string& path);
     void LoadDefaultSample();
@@ -65,6 +67,9 @@ protected:
 private:
     std::string m_markdownText;
     std::string m_currentPath;
+    // Directory m_currentPath lives in - relative image paths resolve against this, see
+    // ResolveImagePath().
+    std::string m_currentDir;
     std::array<Weights, 6> m_headingFonts{};
     Weights m_bodyFont;
 
@@ -103,6 +108,27 @@ private:
     void UpdateSelectionInput();
     void ResetSelection();
     void CopySelectionToClipboard() const;
+
+    // Local image loading (see get_image()). Remote (http/https) image references are left
+    // unsupported and silently skipped, same as a path that fails to resolve at all - no network
+    // code in this app. GLuint is always an unsigned int per the GL spec, spelled out that way
+    // here rather than pulling a GL header into this header just for the typedef.
+    struct CachedImage
+    {
+        unsigned int texture = 0;
+        int width = 0;
+        int height = 0;
+        // false = load was attempted and failed; cached too, so a bad path/corrupt file isn't
+        // retried every frame.
+        bool valid = false;
+    };
+    // Keyed by resolved filesystem path. Declared mutable because get_image() is const (an
+    // imgui_md interface requirement) but still needs to populate this cache lazily on first use
+    // of each image.
+    mutable std::unordered_map<std::string, CachedImage> m_imageCache;
+    std::string ResolveImagePath(const std::string& href) const;
+    CachedImage LoadImageFile(const std::string& path) const;
+    void ClearImageCache();
 
     // Set whenever a new document is loaded so Render() can snap the window's scroll position back
     // to the top on the next frame - otherwise a shorter document loaded while scrolled down in a

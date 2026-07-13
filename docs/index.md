@@ -8,11 +8,11 @@ title: MiniMD
 A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake5.
 
 ## Why MiniMD?
-MiniMD renders actual CommonMark/GFM markdown - tables, ordered lists, strikethrough, underline, fenced code, basic inline HTML - in a lightweight native window, no browser or Electron involved.
+MiniMD renders actual CommonMark/GFM markdown - tables, ordered lists, blockquotes, bold/italic, strikethrough, underline, fenced code, local images - in a lightweight native window, no browser or Electron involved.
 
 ## Features
 
-* Renders CommonMark/GFM: tables, lists, strikethrough, underline, fenced code, inline HTML
+* Renders CommonMark/GFM: tables, lists, blockquotes, bold/italic, strikethrough, underline, fenced code, local images
 * Drag-and-drop a `.md` file onto the window, or pass one as a command-line argument
 * Recent Files menu (last 8, persisted across runs)
 * Zoom in/out (Ctrl+=/Ctrl+-/Ctrl+0)
