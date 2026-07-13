@@ -234,6 +234,56 @@ void MarkdownView::SPAN_CODE(bool e)
     m_is_code = e;
 }
 
+void MarkdownView::BLOCK_QUOTE(bool e)
+{
+    if (e)
+    {
+        ImGui::NewLine();
+        ImGui::Indent();
+        m_quoteStack.push_back(ImGui::GetCursorScreenPos());
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        return;
+    }
+
+    ImGui::PopStyleColor();
+
+    // Left bar spans from the top of the quote (captured on enter, before any content) down to the cursor's
+    // current position now that all of the quote's content has been laid out - drawn at the midpoint of the
+    // indent gutter so it sits between the outer margin and the indented text.
+    ImVec2 top = m_quoteStack.back();
+    m_quoteStack.pop_back();
+    float bottomY = ImGui::GetCursorScreenPos().y;
+    float barX = top.x - ImGui::GetStyle().IndentSpacing * 0.5f;
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(barX, top.y), ImVec2(barX, bottomY),
+        ImGui::GetColorU32(ImGuiCol_TextDisabled), 2.0f);
+
+    ImGui::Unindent();
+    ImGui::NewLine();
+}
+
+// A real ImGui::Checkbox() would look interactive, but there's nowhere to persist a click back to the source
+// file in a read-only viewer - so this is plain ImDrawList output instead: a square outline, plus a checkmark
+// stroke if the item is marked done. Drawn as vector shapes rather than a "☐"/"☑" glyph so it doesn't
+// depend on those code points being present in whatever font is baked into the atlas.
+void MarkdownView::render_task_checkbox(bool checked)
+{
+    const float sz = ImGui::GetFontSize() * 0.8f;
+    const float lineHeight = ImGui::GetTextLineHeight();
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    p.y += (lineHeight - sz) * 0.5f;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    dl->AddRect(p, ImVec2(p.x + sz, p.y + sz), col, 2.0f, 1.5f, 0); // rounding, thickness, flags
+    if (checked)
+    {
+        dl->AddLine(ImVec2(p.x + sz * 0.2f, p.y + sz * 0.5f), ImVec2(p.x + sz * 0.42f, p.y + sz * 0.75f), col, 1.5f);
+        dl->AddLine(ImVec2(p.x + sz * 0.42f, p.y + sz * 0.75f), ImVec2(p.x + sz * 0.8f, p.y + sz * 0.2f), col, 1.5f);
+    }
+
+    ImGui::Dummy(ImVec2(sz, lineHeight));
+}
+
 // Real ImGui tables (ImGuiTableFlags_SizingFixedFit, see BLOCK_TABLE()) auto-fit each column's width to its content and don't expose a
 // per-cell content-alignment flag - TableSetupColumn()'s flags control sorting/resizing, not where text sits within the cell. Column setup
 // also has to happen before the first TableNextRow(), which the base class already calls in BLOCK_TR() before per-cell detail (and therefore

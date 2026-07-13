@@ -52,6 +52,8 @@ protected:
     void BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e) override;
     void SPAN_CODE(bool e) override;
     void BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e) override;
+    void BLOCK_QUOTE(bool e) override;
+    void render_task_checkbox(bool checked) override;
 
 private:
     std::string m_markdownText;
@@ -80,6 +82,10 @@ private:
     MD_ALIGN m_cellAlign = MD_ALIGN_DEFAULT;
     float m_cellColWidth = 0.0f;
     int m_cellVtxStart = 0;
+
+    // Screen-space cursor position at the top of each open blockquote, one entry per nesting level - used to draw
+    // each quote's left bar once its content (and bottom Y) is known, see BLOCK_QUOTE().
+    std::vector<ImVec2> m_quoteStack;
 
     // One entry per contiguous, already-wrapped chunk of literal text drawn by the last Render() call. [begin,end) point directly into
     // m_markdownText - see text_run(). Used both for hit-testing mouse clicks/drags into a character offset, and for reconstructing the selected
