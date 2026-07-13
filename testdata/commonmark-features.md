@@ -184,6 +184,12 @@ Text inside a `<div class="red">...</div>` block.
 
 Escaped characters that would otherwise be markdown syntax: \*not italic\*, \[not a link\](not-a-url), \# not a heading, \`not code\`.
 
+## Emoji
+
+Plain: 🎉 🚀 💡 📌 🔥 ⭐ 👍 😀 ✅ ❌ ⚠️
+
+Inside emphasis: **🎉 bold with emoji**, *🚀 italic with emoji*, ~~❌ strikethrough with emoji~~.
+
 ## Images
 
 See `images-local.md` and `images-local-remote.md` for image-specific test cases (MiniMD currently has no image loading implemented - `MarkdownView::get_image()` returns `false` - so images are expected to be skipped entirely rather than shown as broken-image placeholders).

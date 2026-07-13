@@ -22,17 +22,15 @@
     #endif
 #endif
 
-// Local-only image decode for get_image() - no network code, so http(s):// references in markdown
-// are left unsupported and silently skipped (get_image() checks for "://" before ever touching
-// the filesystem). This is the one translation unit that compiles stb_image's implementation.
+// Local-only image decode for get_image() - no network code, so http(s):// references in markdown are left unsupported and silently skipped
+// (get_image() checks for "://" before ever touching the filesystem). This is the one translation unit that compiles stb_image's implementation.
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 namespace
 {
-    // Per-user config directory, created if missing: %APPDATA%\MiniMD on Windows,
-    // $XDG_CONFIG_HOME/minimd (or ~/.config/minimd) on Linux. Empty if it can't be determined -
-    // callers treat that as "persistence unavailable, carry on without it" rather than an error.
+    // Per-user config directory, created if missing: %APPDATA%\MiniMD on Windows, $XDG_CONFIG_HOME/minimd (or ~/.config/minimd) on Linux. Empty if
+    // it can't be determined - callers treat that as "persistence unavailable, carry on without it" rather than an error.
     std::string GetConfigDir()
     {
 #if defined(_WIN32)
@@ -71,8 +69,8 @@ namespace
         return dir.empty() ? std::string() : dir + "/recent.txt";
     }
 
-    // Recent-files entries are stored as absolute paths so they still resolve on a later run
-    // regardless of what the process's working directory happens to be at that point.
+    // Recent-files entries are stored as absolute paths so they still resolve on a later run regardless of what the process's working directory
+    // happens to be at that point.
     std::string ToAbsolutePath(const std::string& path)
     {
 #if defined(_WIN32)
@@ -92,9 +90,8 @@ namespace
 #if defined(DEBUG)
 namespace
 {
-    // Directory containing the running executable - used to find testdata/ regardless of the
-    // process's current working directory (which differs depending on whether it was launched
-    // via the VS debugger, double-clicked from bin/<cfg>/MiniMD/, or run from a shell elsewhere).
+    // Directory containing the running executable - used to find testdata/ regardless of the process's current working directory (which differs
+    // depending on whether it was launched via the VS debugger, double-clicked from bin/<cfg>/MiniMD/, or run from a shell elsewhere).
     std::string GetExecutableDir()
     {
 #if defined(_WIN32)
@@ -116,9 +113,8 @@ namespace
         return slash == std::string::npos ? std::string() : path.substr(0, slash);
     }
 
-    // The exe always lands at <repo_root>/bin/<cfg>-<system>-<arch>/MiniMD/ (see
-    // src/premake5.lua's targetdir), so this fixed number of ".." hops reaches testdata/
-    // regardless of machine or launch method.
+    // The exe always lands at <repo_root>/bin/<cfg>-<system>-<arch>/MiniMD/ (see src/premake5.lua's targetdir), so this fixed number of ".." hops
+    // reaches testdata/ regardless of machine or launch method.
     std::string GetTestDataDir()
     {
         std::string exeDir = GetExecutableDir();
@@ -137,25 +133,21 @@ MarkdownView::~MarkdownView()
     ClearImageCache();
 }
 
-void MarkdownView::ApplyFontFamily()
+void MarkdownView::SetFonts(const FontSet& fonts)
 {
-    const FontSet& set = m_fontSets[static_cast<size_t>(m_fontFamily)];
-    m_headingFonts = set.headings;
-    m_bodyFont = set.body;
+    m_headingFonts = fonts.headings;
+    m_bodyFont = fonts.body;
 
-    // Plain body text has no per-run font of its own (get_font() returns nullptr for it, which
-    // PushFont() takes to mean "whatever's current") - so the body's regular weight is swapped in
-    // via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the
-    // document. Bold/italic body runs still go through get_font() - see there.
-    ImGui::GetIO().FontDefault = set.body.regular;
+    // Plain body text has no per-run font of its own (get_font() returns nullptr for it, which PushFont() takes to mean "whatever's current") - so
+    // the body's regular weight is swapped in via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the document.
+    // Bold/italic body runs still go through get_font() - see there.
+    ImGui::GetIO().FontDefault = fonts.body.regular;
 }
 
 ImFont* MarkdownView::get_font() const
 {
-    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Fonts are built once in
-    // main.cpp and handed in via SetFonts()/ApplyFontFamily() - index/null-check here so a
-    // missing font (atlas build failed, etc.) just falls back to the default rather than
-    // dereferencing null.
+    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Fonts are built once in main.cpp and handed in via SetFonts() - index/null-check
+    // here so a missing font (atlas build failed, etc.) just falls back to the default rather than dereferencing null.
     bool inHeading = m_hlevel >= 1 && m_hlevel <= m_headingFonts.size();
     const Weights& set = inHeading ? m_headingFonts[m_hlevel - 1] : m_bodyFont;
 
@@ -170,15 +162,13 @@ ImFont* MarkdownView::get_font() const
     if (f)
         return f;
 
-    // No dedicated bold/italic/bold-italic variant available (or plain text): headings still
-    // need their own regular-weight font to get their larger size; plain body text falls back to
-    // nullptr so PushFont() leaves whatever's current (io.FontDefault) alone.
+    // No dedicated bold/italic/bold-italic variant available (or plain text): headings still need their own regular-weight font to get their larger
+    // size; plain body text falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault) alone.
     return inHeading ? set.regular : nullptr;
 }
 
-// m_href isn't a filesystem path as-is: it's whatever's between (parens) in the markdown, so
-// relative references (the common case) need resolving against the loaded file's own directory,
-// not the process's current working directory (which could be anything - see LoadFile()).
+// m_href isn't a filesystem path as-is: it's whatever's between (parens) in the markdown, so relative references (the common case) need resolving
+// against the loaded file's own directory, not the process's current working directory (which could be anything - see LoadFile()).
 std::string MarkdownView::ResolveImagePath(const std::string& href) const
 {
     bool isAbsolute = !href.empty() &&
@@ -191,8 +181,7 @@ std::string MarkdownView::ResolveImagePath(const std::string& href) const
 MarkdownView::CachedImage MarkdownView::LoadImageFile(const std::string& path) const
 {
     int width = 0, height = 0, channels = 0;
-    // Force 4 components (RGBA) regardless of source format so the GL upload below never has to
-    // branch on channel count.
+    // Force 4 components (RGBA) regardless of source format so the GL upload below never has to branch on channel count.
     unsigned char* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!pixels)
         return CachedImage{}; // valid=false - bad path, unsupported format, corrupt file, etc.
@@ -229,8 +218,8 @@ bool MarkdownView::get_image(image_info& nfo) const
     if (m_href.empty())
         return false;
 
-    // No network code in this app - a remote reference just falls through to "couldn't load",
-    // same as a relative path that doesn't resolve to anything.
+    // No network code in this app - a remote reference just falls through to "couldn't load", same as a relative path that doesn't resolve to
+    // anything.
     if (m_href.find("://") != std::string::npos)
         return false;
 
@@ -268,8 +257,7 @@ void MarkdownView::open_url() const
 
 void MarkdownView::LoadFile(const std::string& path)
 {
-    // Old images are resolved against the *previous* file's directory - drop them before anything
-    // else, whether or not this load actually succeeds.
+    // Old images are resolved against the *previous* file's directory - drop them before anything else, whether or not this load actually succeeds.
     ClearImageCache();
 
     std::ifstream file(path, std::ios::binary);
@@ -396,9 +384,8 @@ void MarkdownView::UpdateZoomInput()
 
 void MarkdownView::ResetSelection()
 {
-    // Selection anchors and recorded runs are raw pointers into m_markdownText - once that
-    // string is replaced (new file, sample doc) they'd be dangling, so this must run on every
-    // load before the old buffer goes away.
+    // Selection anchors and recorded runs are raw pointers into m_markdownText - once that string is replaced (new file, sample doc) they'd be
+    // dangling, so this must run on every load before the old buffer goes away.
     m_selAnchor = nullptr;
     m_selHead = nullptr;
     m_selecting = false;
@@ -441,8 +428,8 @@ const char* MarkdownView::HitTest(const ImVec2& screenPos) const
     if (m_runs.empty())
         return nullptr;
 
-    // Pick the closest run, weighting vertical distance heavily so we don't jump to a
-    // horizontally-closer run on the wrong line (e.g. a short heading above a long paragraph).
+    // Pick the closest run, weighting vertical distance heavily so we don't jump to a horizontally-closer run on the wrong line (e.g. a short
+    // heading above a long paragraph).
     const TextRun* best = nullptr;
     float bestDist = FLT_MAX;
     for (const TextRun& run : m_runs)
@@ -464,9 +451,8 @@ const char* MarkdownView::HitTest(const ImVec2& screenPos) const
     if (screenPos.x >= best->max.x)
         return best->end;
 
-    // Linear scan over UTF-8 codepoint boundaries to find which inter-glyph gap the mouse is
-    // closest to. O(run length) per call, only done on click/drag frames, and runs are at most
-    // one wrapped line long, so this doesn't need to be cleverer than that.
+    // Linear scan over UTF-8 codepoint boundaries to find which inter-glyph gap the mouse is closest to. O(run length) per call, only done on
+    // click/drag frames, and runs are at most one wrapped line long, so this doesn't need to be cleverer than that.
     const char* prevBoundary = best->begin;
     float prevX = best->min.x;
     const char* s = best->begin;
@@ -493,11 +479,9 @@ std::string MarkdownView::BuildSelectionText() const
     if (!HasSelection())
         return {};
 
-    // Selection anchors are raw pointers into m_markdownText (see HitTest()/text_run()), so the
-    // literal slice between them *is* the underlying markdown source for that span - list
-    // markers, table pipes, ** emphasis markers and all - not just whatever ended up rendered.
-    // That's deliberate: this copies the source you'd paste back into another markdown file, not
-    // a plain-text rendering of what's on screen.
+    // Selection anchors are raw pointers into m_markdownText (see HitTest()/text_run()), so the literal slice between them *is* the underlying
+    // markdown source for that span - list markers, table pipes, ** emphasis markers and all - not just whatever ended up rendered. That's
+    // deliberate: this copies the source you'd paste back into another markdown file, not a plain-text rendering of what's on screen.
     const char* selMin = m_selAnchor < m_selHead ? m_selAnchor : m_selHead;
     const char* selMax = m_selAnchor < m_selHead ? m_selHead : m_selAnchor;
     return std::string(selMin, selMax);
@@ -507,9 +491,8 @@ void MarkdownView::UpdateSelectionInput()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-    // Only start a *new* selection from a click that lands on the document itself, not on some
-    // other widget (context menu, dialog) - but once a drag is already in progress, keep
-    // extending it even if the mouse strays over another widget or outside the window.
+    // Only start a *new* selection from a click that lands on the document itself, not on some other widget (context menu, dialog) - but once a drag
+    // is already in progress, keep extending it even if the mouse strays over another widget or outside the window.
     bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
     bool canStart = hovered && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive();
 
@@ -531,8 +514,8 @@ void MarkdownView::UpdateSelectionInput()
         m_selecting = false;
     }
 
-    // Guarded by !IsAnyItemActive() so this doesn't fight some other focused widget's own
-    // Ctrl+C handling (e.g. if a future dialog adds a text field).
+    // Guarded by !IsAnyItemActive() so this doesn't fight some other focused widget's own Ctrl+C handling (e.g. if a future dialog adds a text
+    // field).
     if (HasSelection() && !ImGui::IsAnyItemActive() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
         CopySelectionToClipboard();
 }
@@ -567,11 +550,10 @@ void MarkdownView::RegisterFileAssociation()
         return result == ERROR_SUCCESS;
     };
 
-    // Per-user registration under HKCU\Software\Classes - no admin rights needed, unlike HKCR/HKLM.
-    // We register a ProgID and add it to .md's "Open With" list rather than overwriting .md's
-    // default association outright: Windows 8+ hash-protects the actual default (UserChoice)
-    // against being set programmatically, so the user still confirms it via Explorer's "Open
-    // with" or Settings > Default apps - this just makes MiniMD show up there as a choice.
+    // Per-user registration under HKCU\Software\Classes - no admin rights needed, unlike HKCR/HKLM. We register a ProgID and add it to .md's "Open
+    // With" list rather than overwriting .md's default association outright: Windows 8+ hash-protects the actual default (UserChoice) against being
+    // set programmatically, so the user still confirms it via Explorer's "Open with" or Settings > Default apps - this just makes MiniMD show up
+    // there as a choice.
     const std::string progId = "Software\\Classes\\MiniMD.md";
     const std::string command = "\"" + exePath + "\" \"%1\"";
 
@@ -613,9 +595,8 @@ bool MarkdownView::IsFileAssociationRegistered() const
 
 void MarkdownView::UnregisterFileAssociation()
 {
-    // Mirror image of RegisterFileAssociation(): drop the ProgID (and everything under it) plus
-    // its entry in .md's "Open With" list. Doesn't touch OpenWithProgids itself since other apps
-    // may have their own entries there.
+    // Mirror image of RegisterFileAssociation(): drop the ProgID (and everything under it) plus its entry in .md's "Open With" list. Doesn't touch
+    // OpenWithProgids itself since other apps may have their own entries there.
     RegDeleteTreeA(HKEY_CURRENT_USER, "Software\\Classes\\MiniMD.md");
 
     HKEY key;
@@ -680,12 +661,6 @@ void MarkdownView::RenderContextMenu()
                 ZoomOut();
             if (ImGui::MenuItem("Reset Zoom", "Ctrl+0"))
                 ResetZoom();
-
-            ImGui::Separator();
-            if (ImGui::MenuItem("Inter", nullptr, m_fontFamily == FontFamily::Inter))
-                SetFontFamily(FontFamily::Inter);
-            if (ImGui::MenuItem("Noto Sans", nullptr, m_fontFamily == FontFamily::NotoSans))
-                SetFontFamily(FontFamily::NotoSans);
             ImGui::EndMenu();
         }
 
@@ -731,10 +706,8 @@ void MarkdownView::RenderContextMenu()
     }
 
 #if defined(_WIN32)
-    // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above -
-    // MenuItem closes the popup stack it lives in on the same frame it's clicked, and opening a
-    // brand-new popup into a stack that's mid-close doesn't reliably work. Deferring one frame
-    // sidesteps that.
+    // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above - MenuItem closes the popup stack it lives in on the same
+    // frame it's clicked, and opening a brand-new popup into a stack that's mid-close doesn't reliably work. Deferring one frame sidesteps that.
     if (m_showOptionsDialog)
     {
         ImGui::OpenPopup("Options");
@@ -763,8 +736,8 @@ void MarkdownView::RenderContextMenu()
 
 void MarkdownView::Render()
 {
-    // Reapplied every frame rather than just on a zoom action, since it's cheap and this keeps
-    // it a straight mirror of m_fontScale regardless of what else might touch IO.
+    // Reapplied every frame rather than just on a zoom action, since it's cheap and this keeps it a straight mirror of m_fontScale regardless of
+    // what else might touch IO.
     ImGui::GetIO().FontGlobalScale = m_fontScale;
     UpdateZoomInput();
     RenderContextMenu();
@@ -775,9 +748,8 @@ void MarkdownView::Render()
         m_scrollToTop = false;
     }
 
-    // Uses m_runs as committed by *last* frame's print() call below - one frame of lag on the
-    // layout, which is the normal immediate-mode way to do hit-testing (ImGui's own widgets work
-    // the same way) and isn't visible in practice since layout is stable frame to frame.
+    // Uses m_runs as committed by *last* frame's print() call below - one frame of lag on the layout, which is the normal immediate-mode way to do
+    // hit-testing (ImGui's own widgets work the same way) and isn't visible in practice since layout is stable frame to frame.
     UpdateSelectionInput();
 
     m_pendingRuns.clear();

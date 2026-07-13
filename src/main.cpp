@@ -1,4 +1,3 @@
-#include <array>
 #include <cstdio>
 #include <string>
 
@@ -16,11 +15,10 @@
 #include "MarkdownView.h"
 #include "res/icon_data.h"
 #include "res/font_inter_data.h"
-#include "res/font_notosans_data.h"
 
-// We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is silently discarded.
-// Send diagnostics to the debugger (visible in VS's Output window / DebugView) and, for anything fatal, pop a message box since the user has no other way to see why the app didn't start.
-// Linux keeps a real terminal, so stderr there is fine as-is.
+// We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is silently discarded. Send diagnostics to the debugger
+// (visible in VS's Output window / DebugView) and, for anything fatal, pop a message box since the user has no other way to see why the app didn't
+// start. Linux keeps a real terminal, so stderr there is fine as-is.
 static void ReportError(const char* message, bool fatal)
 {
 #ifdef _WIN32
@@ -59,7 +57,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // OpenGL 3.0 context, GLSL 130 - the lowest common denominator ImGui's OpenGL3 backend supports well, keeps us compatible with older GPUs/drivers.
+    // OpenGL 3.0 context, GLSL 130 - the lowest common denominator ImGui's OpenGL3 backend supports well, keeps us compatible with older
+    // GPUs/drivers.
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
@@ -75,9 +74,8 @@ int main(int argc, char** argv)
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // vsync
 
-    // Cross-platform window/taskbar icon from the pixel data baked in res/icon_data.h (see
-    // tools/make_icon.py). GLFWimage::pixels is non-const in the struct but glfwSetWindowIcon
-    // only reads it, so the const_cast here is safe.
+    // Cross-platform window/taskbar icon from the pixel data baked in res/icon_data.h (see tools/make_icon.py). GLFWimage::pixels is non-const in
+    // the struct but glfwSetWindowIcon only reads it, so the const_cast here is safe.
     GLFWimage icon;
     icon.width = AppIcon::kWidth;
     icon.height = AppIcon::kHeight;
@@ -90,13 +88,13 @@ int main(int argc, char** argv)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
 
-    // Body + one larger font per heading level, baked at fixed pixel sizes (rather than relying on ImGui's own scaling) so text stays crisp - see MarkdownView::ZoomIn/Out for the separate FontGlobalScale-based zoom that stretches these at render time. Both families are loaded into the one atlas up front so switching between them (see MarkdownView::SetFontFamily) is just swapping which already-built ImFont*s are in use, no atlas rebuild needed.
+    // Body + one larger font per heading level, baked at fixed pixel sizes (rather than relying on ImGui's own scaling) so text stays crisp - see
+    // MarkdownView::ZoomIn/Out for the separate FontGlobalScale-based zoom that stretches these at render time.
     static const float kBodySize = 16.0f;
     static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
 
-    // One compressed TTF blob per weight/style - regular, bold, italic, bold-italic - each baked
-    // at every size (body + 6 headings) so **bold** and *italic* spans get a real font instead of
-    // just reusing the regular glyphs (see MarkdownView::get_font()).
+    // One compressed TTF blob per weight/style - regular, bold, italic, bold-italic - each baked at every size (body + 6 headings) so **bold** and
+    // *italic* spans get a real font instead of just reusing the regular glyphs (see MarkdownView::get_font()).
     auto loadWeights = [&](const char* regular, const char* bold, const char* italic, const char* boldItalic, float size) -> MarkdownView::Weights
     {
         MarkdownView::Weights w;
@@ -116,18 +114,15 @@ int main(int argc, char** argv)
         return set;
     };
 
-    std::array<MarkdownView::FontSet, 2> fontSets{
-        loadFontSet(AppFonts::kInterRegularCompressedDataBase85, AppFonts::kInterBoldCompressedDataBase85,
-                    AppFonts::kInterItalicCompressedDataBase85, AppFonts::kInterBoldItalicCompressedDataBase85),
-        loadFontSet(AppFonts::kNotoSansRegularCompressedDataBase85, AppFonts::kNotoSansBoldCompressedDataBase85,
-                    AppFonts::kNotoSansItalicCompressedDataBase85, AppFonts::kNotoSansBoldItalicCompressedDataBase85),
-    };
+    MarkdownView::FontSet fontSet = loadFontSet(
+        AppFonts::kInterRegularCompressedDataBase85, AppFonts::kInterBoldCompressedDataBase85,
+        AppFonts::kInterItalicCompressedDataBase85, AppFonts::kInterBoldItalicCompressedDataBase85);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     MarkdownView view;
-    view.SetFonts(fontSets);
+    view.SetFonts(fontSet);
     glfwSetWindowUserPointer(window, &view);
     glfwSetDropCallback(window, DropCallback);
 
@@ -158,9 +153,8 @@ int main(int argc, char** argv)
         view.Render();
         ImGui::End();
 
-        // The ImGui window itself has no title bar (see flags above) - this drives the actual
-        // OS window/taskbar title instead. Only pushed to GLFW when it changes rather than every
-        // frame, since glfwSetWindowTitle() isn't free.
+        // The ImGui window itself has no title bar (see flags above) - this drives the actual OS window/taskbar title instead. Only pushed to GLFW
+        // when it changes rather than every frame, since glfwSetWindowTitle() isn't free.
         std::string title = view.GetWindowTitle();
         if (title != lastTitle)
         {
