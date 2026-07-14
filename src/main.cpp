@@ -120,8 +120,13 @@ int main(int argc, char** argv)
 
     // Body + one larger font per heading level, baked at fixed pixel sizes (rather than relying on ImGui's own scaling) so text stays crisp - see
     // MarkdownView::ZoomIn/Out for the separate FontGlobalScale-based zoom that stretches these at render time.
-    static const float kBodySize = 16.0f;
-    static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
+    static const float kBodySize = 18.0f;
+    static const float kHeadingSizes[6] = { 36.0f, 30.0f, 26.0f, 24.0f, 20.0f, 19.0f };
+
+    // Consolas renders visibly larger than Segoe UI at the same nominal pixel size (its cap-height/em ratio is bigger), so code spans/blocks
+    // get their own, smaller size rather than reusing kBodySize - this keeps code visually matched to surrounding body text instead of towering
+    // over it.
+    static const float kMonoSize = 15.0f;
 
     // Loaded straight from the OS's own font files rather than embedding a font in the binary. Segoe UI is Windows' own UI typeface and ships on
     // every Windows install in real regular/bold/italic/bold-italic weights, so markdown emphasis no longer needs to be faked at render time
@@ -155,7 +160,7 @@ int main(int argc, char** argv)
     fontSet.bold = loadStyle(boldPath);
     fontSet.italic = loadStyle(italicPath);
     fontSet.boldItalic = loadStyle(boldItalicPath);
-    fontSet.mono = LoadSystemFont(io, monoPath, kBodySize);
+    fontSet.mono = LoadSystemFont(io, monoPath, kMonoSize);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);

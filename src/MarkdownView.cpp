@@ -258,9 +258,19 @@ void MarkdownView::SPAN_CODE(bool e)
 {
     m_is_code = e;
     if (e)
+    {
+        // Mono renders at a smaller pixel size than body (see main.cpp) to match its visually larger glyphs at equal size.
+        // The smaller mono glyphs would sit noticeably higher than the body text surrounding them instead of sharing its baseline.
+        // Shifting the cursor down by the ascent difference before drawing puts the two baselines back in line.
+        const float bodyAscent = ImGui::GetFontBaked()->Ascent;
         ImGui::PushFont(m_fonts.mono);
+        const float monoAscent = ImGui::GetFontBaked()->Ascent;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (bodyAscent - monoAscent));
+    }
     else
+    {
         ImGui::PopFont();
+    }
 }
 
 void MarkdownView::BLOCK_QUOTE(bool e)
