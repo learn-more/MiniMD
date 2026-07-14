@@ -85,6 +85,7 @@ int main(int argc, char** argv)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr; // no imgui.ini - no persisted window layout state to manage
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
 
