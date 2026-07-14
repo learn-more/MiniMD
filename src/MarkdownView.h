@@ -9,6 +9,8 @@
 #include "imgui.h"
 #include "imgui_md.h"
 
+#include "AboutView.h"
+
 // Owns the loaded markdown text, and parses/renders it via MD4C (through imgui_md). No menu bar - everything (reload, zoom, debug test files,
 // .md registration, exit) lives in a right-click context menu over the document itself.
 class MarkdownView : public imgui_md
@@ -159,10 +161,16 @@ private:
     void ResetZoom();
     void UpdateZoomInput();
 
-    // Right-click popup over the document: Reload / Recent Files / View (zoom) / Debug (DEBUG builds only) / Options / Exit. Also owns the Options
-    // dialog (opened via m_showOptionsDialog since a modal can't reliably be opened mid-popup on the same frame it's requested).
+    // Right-click popup over the document: Reload / Recent Files / View (zoom) / Debug (DEBUG builds only) /
+    // Help (About, Check for Updates) / Options / Exit. Also owns the Options and About dialogs (each opened via
+    // its own m_show*Dialog flag since a modal can't reliably be opened mid-popup on the same frame it's requested).
     void RenderContextMenu();
     bool m_showOptionsDialog = false;
+    bool m_showAboutDialog = false;
+    // Renders the About dialog's fixed credits document - a separate imgui_md instance (see AboutView.h) rather
+    // than repurposing *this, so opening it can never disturb the loaded document's own state (m_currentPath,
+    // selection, m_href, ...).
+    AboutView m_aboutView;
 
 #if defined(_WIN32)
     // Registers MiniMD as an available "Open with" handler for .md files (HKCU, no admin rights needed). Windows 8+ won't let an app silently become

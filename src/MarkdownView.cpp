@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "PlatformUtil.h"
+
 #if defined(_WIN32)
     #define WIN32_LEAN_AND_MEAN
     #include <Windows.h>
@@ -29,6 +31,8 @@
 
 namespace
 {
+    const char kReleasesUrl[] = "https://github.com/learn-more/MiniMD/releases";
+
     // Per-user config directory, created if missing: %APPDATA%\MiniMD on Windows, $XDG_CONFIG_HOME/minimd (or ~/.config/minimd) on Linux. Empty if
     // it can't be determined - callers treat that as "persistence unavailable, carry on without it" rather than an error.
     std::string GetConfigDir()
@@ -194,6 +198,10 @@ void MarkdownView::SetFonts(const FontSet& fonts)
     // Plain body text has no per-run font of its own (get_font() returns nullptr for it, which PushFont() takes to mean "whatever's current") - so
     // the body's regular weight is swapped in via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the document.
     ImGui::GetIO().FontDefault = fonts.body;
+
+    // About dialog shares the same heading/body fonts rather than falling back to imgui_md's font-less default -
+    // see AboutView::get_font().
+    m_aboutView.SetFonts(fonts.body, fonts.headings);
 }
 
 ImFont* MarkdownView::get_font() const
@@ -466,15 +474,7 @@ bool MarkdownView::get_image(image_info& nfo) const
 
 void MarkdownView::open_url() const
 {
-    if (m_href.empty())
-        return;
-
-#if defined(_WIN32)
-    ShellExecuteA(nullptr, "open", m_href.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-#elif defined(__linux__)
-    std::string cmd = "xdg-open \"" + m_href + "\" >/dev/null 2>&1 &";
-    std::system(cmd.c_str());
-#endif
+    OpenExternalUrl(m_href);
 }
 
 void MarkdownView::LoadFile(const std::string& path)
@@ -957,12 +957,54 @@ void MarkdownView::RenderContextMenu()
             m_showOptionsDialog = true;
 #endif
 
+        if (ImGui::BeginMenu("Help"))
+        {
+            if (ImGui::MenuItem("Check for Updates"))
+                OpenExternalUrl(kReleasesUrl);
+            if (ImGui::MenuItem("About"))
+                m_showAboutDialog = true;
+            ImGui::EndMenu();
+        }
+
         ImGui::Separator();
         if (ImGui::MenuItem("Exit"))
             m_quitRequested = true;
 
         ImGui::EndPopup();
     }
+
+    // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above - MenuItem closes the popup stack it lives in on the same
+    // frame it's clicked, and opening a brand-new popup into a stack that's mid-close doesn't reliably work. Deferring one frame sidesteps that.
+    if (m_showAboutDialog)
+    {
+        ImGui::OpenPopup("About");
+        m_showAboutDialog = false;
+    }
+
+    // Width fixed up front (rather than ImGuiWindowFlags_AlwaysAutoResize) so imgui_md's word-wrap - which wraps to
+    // the window's own current content width - has a stable value to wrap against from the very first frame;
+    // height still auto-fits the (fixed) content underneath that fixed width. NoResize since there's nothing
+    // useful to resize into - it's a short, fixed document.
+    // Extra WindowPadding (over ImGui's default) so the credits text isn't flush against the popup's edges - the
+    // default padding reads fine for the main document view's own scrollable window, but this modal is small
+    // enough that it shows.
+    ImGui::SetNextWindowSize(ImVec2(440.0f, 0.0f), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 16.0f));
+    if (ImGui::BeginPopupModal("About", nullptr, ImGuiWindowFlags_NoResize))
+    {
+        m_aboutView.Render();
+
+        ImGui::Spacing();
+        // Right-aligned rather than left, so it lines up under the credits text's own right edge instead of
+        // floating at the window's left margin.
+        float buttonWidth = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth);
+        if (ImGui::Button("Close"))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
 
 #if defined(_WIN32)
     // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above - MenuItem closes the popup stack it lives in on the same
