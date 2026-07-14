@@ -54,7 +54,8 @@ jobs:
         run: msbuild MiniMD.sln /m /p:Configuration=Release /p:Platform=x64
 
       - name: Package
-        run: 7z a MiniMD-x64.zip bin\Release-windows-x86_64\MiniMD\MiniMD.exe
+        run: 7z a ..\..\..\MiniMD-x64.zip .\MiniMD.exe
+        working-directory: bin\Release-windows-x86_64\MiniMD
 
       - uses: softprops/action-gh-release@v2
         with:
