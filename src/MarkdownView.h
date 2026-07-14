@@ -178,5 +178,11 @@ private:
     void RegisterFileAssociation();
     void UnregisterFileAssociation();
     bool IsFileAssociationRegistered() const;
+    // Set by RegisterFileAssociation() on success/failure instead of native MessageBoxA calls, so the outcome
+    // renders as an imgui popup (consistent with the rest of the UI) rather than a separate OS window on top of
+    // the Options dialog. m_registerErrorMessage holds the failure text (empty when the success dialog is used).
+    bool m_showRegisterSuccessDialog = false;
+    bool m_showRegisterErrorDialog = false;
+    std::string m_registerErrorMessage;
 #endif
 };

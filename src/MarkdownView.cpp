@@ -793,7 +793,8 @@ void MarkdownView::RegisterFileAssociation()
     DWORD len = GetModuleFileNameA(nullptr, exePathBuf, MAX_PATH);
     if (len == 0 || len == MAX_PATH)
     {
-        MessageBoxA(nullptr, "Could not determine MiniMD.exe's own path.", "MiniMD", MB_OK | MB_ICONERROR);
+        m_registerErrorMessage = "Could not determine MiniMD.exe's own path.";
+        m_showRegisterErrorDialog = true;
         return;
     }
     std::string exePath(exePathBuf, len);
@@ -830,16 +831,12 @@ void MarkdownView::RegisterFileAssociation()
 
     if (ok)
     {
-        MessageBoxA(nullptr,
-            "MiniMD is now registered for .md files.\n\n"
-            "Right-click a .md file and choose \"Open with\" to pick it (tick \"Always\" to make "
-            "it the default), or set it under Settings > Apps > Default apps.",
-            "MiniMD", MB_OK | MB_ICONINFORMATION);
+        m_showRegisterSuccessDialog = true;
     }
     else
     {
-        MessageBoxA(nullptr, "Registration only partially succeeded - see debug output for details.",
-            "MiniMD", MB_OK | MB_ICONWARNING);
+        m_registerErrorMessage = "Registration only partially succeeded - see debug output for details.";
+        m_showRegisterErrorDialog = true;
     }
 }
 
@@ -1027,6 +1024,50 @@ void MarkdownView::RenderContextMenu()
         }
 
         ImGui::SameLine();
+        if (ImGui::Button("Close"))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+
+    // Deferred one frame for the same reason as the Options/About popups above - RegisterFileAssociation() runs
+    // from inside the Options popup's own Button(), and OpenPopup() doesn't reliably stack a new popup onto one
+    // that's mid-close on the same frame.
+    if (m_showRegisterSuccessDialog)
+    {
+        ImGui::OpenPopup("Registered");
+        m_showRegisterSuccessDialog = false;
+    }
+
+    if (ImGui::BeginPopupModal("Registered", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted("MiniMD is now registered for .md files.");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Right-click a .md file and choose \"Open with\" to pick it (tick \"Always\" to make");
+        ImGui::TextUnformatted("it the default), or set it under Settings > Apps > Default apps.");
+
+        ImGui::Spacing();
+        float buttonWidth = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth);
+        if (ImGui::Button("Close"))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+
+    if (m_showRegisterErrorDialog)
+    {
+        ImGui::OpenPopup("Registration failed");
+        m_showRegisterErrorDialog = false;
+    }
+
+    if (ImGui::BeginPopupModal("Registration failed", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted(m_registerErrorMessage.c_str());
+
+        ImGui::Spacing();
+        float buttonWidth = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth);
         if (ImGui::Button("Close"))
             ImGui::CloseCurrentPopup();
 
