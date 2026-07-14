@@ -14,7 +14,6 @@
 
 #include "MarkdownView.h"
 #include "res/icon_data.h"
-#include "res/font_inter_data.h"
 
 // We're a WindowedApp (no console), so stderr has nowhere to go on Windows - fprintf to it is silently discarded. Send diagnostics to the debugger
 // (visible in VS's Output window / DebugView) and, for anything fatal, pop a message box since the user has no other way to see why the app didn't
@@ -46,6 +45,36 @@ static void DropCallback(GLFWwindow* window, int count, const char** paths)
     auto* view = static_cast<MarkdownView*>(glfwGetWindowUserPointer(window));
     if (view)
         view->LoadFile(paths[0]);
+}
+
+namespace
+{
+#if defined(_WIN32)
+    // %WINDIR%\Fonts\ - where the system TTFs loaded by name below (Segoe UI, Consolas) live. Falls back to the conventional
+    // "C:\Windows\Fonts\" on the vanishingly unlikely chance GetWindowsDirectoryA() itself fails.
+    std::string GetWindowsFontsDir()
+    {
+        char buf[MAX_PATH];
+        UINT len = GetWindowsDirectoryA(buf, MAX_PATH);
+        if (len == 0 || len >= MAX_PATH)
+            return "C:\\Windows\\Fonts\\";
+        return std::string(buf, len) + "\\Fonts\\";
+    }
+#endif
+
+    // Loads one weight/size of a system font by file path. Falls back to ImGui's built-in, no-file-dependency default font at the same pixel
+    // size if the path doesn't resolve - e.g. a stripped-down Windows install missing one of these faces, or this binary run on a platform
+    // where the paths below don't apply - so a missing font file degrades the look rather than crashing the app on startup.
+    ImFont* LoadSystemFont(ImGuiIO& io, const std::string& path, float size)
+    {
+        ImFont* font = io.Fonts->AddFontFromFileTTF(path.c_str(), size);
+        if (font)
+            return font;
+
+        ImFontConfig cfg;
+        cfg.SizePixels = size;
+        return io.Fonts->AddFontDefault(&cfg);
+    }
 }
 
 int main(int argc, char** argv)
@@ -94,19 +123,39 @@ int main(int argc, char** argv)
     static const float kBodySize = 16.0f;
     static const float kHeadingSizes[6] = { 32.0f, 27.0f, 23.0f, 21.0f, 18.0f, 17.0f };
 
-    // Only the regular weight is embedded (baked at every size - body + 6 headings). **bold** and *italic* spans reuse these same glyphs and get
-    // faked at render time instead - see vendor/imgui_md's render_text() (double-draw smear for bold, baseline shear for italic) - rather than
-    // shipping 3 more ~330KB weights just for occasional emphasis in a markdown viewer.
-    auto loadFontSet = [&](const char* regular) -> MarkdownView::FontSet
+    // Loaded straight from the OS's own font files rather than embedding a font in the binary. Segoe UI is Windows' own UI typeface and ships on
+    // every Windows install in real regular/bold/italic/bold-italic weights, so markdown emphasis no longer needs to be faked at render time
+    // (compare vendor/imgui_md's render_text() and MarkdownView::get_font(), which now just picks one of the four FontStyles below per run).
+    // Consolas supplies a dedicated monospace face for code spans/blocks (see MarkdownView::BLOCK_CODE()/SPAN_CODE()) at body size only - code
+    // never appears at heading size, so it gets no heading-sized variants.
+#if defined(_WIN32)
+    const std::string fontDir = GetWindowsFontsDir();
+    const std::string regularPath = fontDir + "segoeui.ttf";
+    const std::string boldPath = fontDir + "segoeuib.ttf";
+    const std::string italicPath = fontDir + "segoeuii.ttf";
+    const std::string boldItalicPath = fontDir + "segoeuiz.ttf";
+    const std::string monoPath = fontDir + "consola.ttf";
+#else
+    // Non-Windows builds (Linux support is scaffolded in the premake scripts but not yet exercised - see README) have no fixed system font path
+    // to rely on; LoadSystemFont() falls back to ImGui's built-in default font for every weight/size below instead of failing to start.
+    const std::string regularPath, boldPath, italicPath, boldItalicPath, monoPath;
+#endif
+
+    auto loadStyle = [&](const std::string& path) -> MarkdownView::FontStyle
     {
-        MarkdownView::FontSet set;
-        set.body = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, kBodySize);
-        for (size_t i = 0; i < set.headings.size(); ++i)
-            set.headings[i] = io.Fonts->AddFontFromMemoryCompressedBase85TTF(regular, kHeadingSizes[i]);
-        return set;
+        MarkdownView::FontStyle style;
+        style.body = LoadSystemFont(io, path, kBodySize);
+        for (size_t i = 0; i < style.headings.size(); ++i)
+            style.headings[i] = LoadSystemFont(io, path, kHeadingSizes[i]);
+        return style;
     };
 
-    MarkdownView::FontSet fontSet = loadFontSet(AppFonts::kInterRegularCompressedDataBase85);
+    MarkdownView::FontSet fontSet;
+    fontSet.regular = loadStyle(regularPath);
+    fontSet.bold = loadStyle(boldPath);
+    fontSet.italic = loadStyle(italicPath);
+    fontSet.boldItalic = loadStyle(boldItalicPath);
+    fontSet.mono = LoadSystemFont(io, monoPath, kBodySize);
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);

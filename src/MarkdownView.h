@@ -24,13 +24,24 @@ public:
 
     void Render();
 
-    // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), all built once in main.cpp after the font atlas exists. Only
-    // one weight is embedded per size - **bold** and *italic* spans reuse these same glyphs and get faked at render time instead (see
-    // vendor/imgui_md's render_text()), rather than baking 3 more weights just for occasional emphasis in a markdown viewer.
-    struct FontSet
+    // Body font plus one larger ImFont* per heading level (index 0 = h1 ... 5 = h6), loaded once in main.cpp after the font atlas exists, straight
+    // from the system Segoe UI family (see main.cpp) rather than an embedded font. One FontStyle per weight/slant combination markdown emphasis
+    // needs - **bold** picks `bold`, *italic* picks `italic`, both together pick `boldItalic` - so get_font() can hand ImGui a real font instead
+    // of faking the look at render time.
+    struct FontStyle
     {
         ImFont* body = nullptr;
         std::array<ImFont*, 6> headings{};
+    };
+    struct FontSet
+    {
+        FontStyle regular;
+        FontStyle bold;
+        FontStyle italic;
+        FontStyle boldItalic;
+        // Code spans/blocks swap to this dedicated monospace font (Consolas, body size only - see BLOCK_CODE()/SPAN_CODE()) instead of just
+        // getting a background band behind body-font glyphs.
+        ImFont* mono = nullptr;
     };
 
     // Handed in once at startup, after the fonts are built into the atlas in main.cpp.
@@ -51,23 +62,28 @@ protected:
     void open_url() const override;
     void text_run(const char* str, const char* str_end, const ImVec2& min, const ImVec2& max) override;
     bool render_entity(const char* str, const char* str_end) override;
+    void soft_break() override;
     void BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e) override;
     void SPAN_CODE(bool e) override;
+    void BLOCK_TABLE(const MD_BLOCK_TABLE_DETAIL* d, bool e) override;
+    void BLOCK_TR(bool e) override;
     void BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e) override;
+    void SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e) override;
     void BLOCK_QUOTE(bool e) override;
     void render_task_checkbox(bool checked) override;
+    float get_table_wrap_width() const override;
 
 private:
     std::string m_markdownText;
     std::string m_currentPath;
     // Directory m_currentPath lives in - relative image paths resolve against this, see ResolveImagePath().
     std::string m_currentDir;
-    std::array<ImFont*, 6> m_headingFonts{};
-    ImFont* m_bodyFont = nullptr;
+    FontSet m_fonts;
 
     // Set for the duration of a fenced/indented code block - distinguishes a code *block* line (full-width, square-cornered background band,
-    // see text_run()) from an inline code *span* (tight rounded pill) sharing the same underlying m_is_code flag. No monospace font is swapped
-    // in for either - see BLOCK_CODE()/SPAN_CODE() in the .cpp for why.
+    // see text_run()) from an inline code *span* (tight rounded pill) sharing the same underlying m_is_code flag. Both also get m_fonts.mono
+    // pushed for their duration - see BLOCK_CODE()/SPAN_CODE() in the .cpp - the band is still drawn on top of that for the same visual cue as
+    // before, just no longer the only one.
     bool m_inCodeBlock = false;
 
     // Y (screen space) of the code-block line whose full-width background band was last drawn by text_run() - lets it draw that band once per
@@ -84,6 +100,15 @@ private:
     MD_ALIGN m_cellAlign = MD_ALIGN_DEFAULT;
     float m_cellColWidth = 0.0f;
     int m_cellVtxStart = 0;
+
+    // Page width captured by BLOCK_TABLE() when a table is entered, before any column exists - handed back by
+    // get_table_wrap_width() so the base class's (private) render_text() can wrap header/body cell text to a fixed,
+    // table-independent cap instead of the cell's own still-settling auto-fit column width, which would be circular.
+    float m_tableWrapWidth = 0.0f;
+    // Distinguishes each ImGui::BeginTable() call within one document - real ImGui tables need a unique ID string per
+    // table, not just per column. Reset to 0 at the top of each Render() call (see there), incremented per table in
+    // BLOCK_TABLE().
+    int m_nextTableId = 0;
 
     // Screen-space cursor position at the top of each open blockquote, one entry per nesting level - used to draw
     // each quote's left bar once its content (and bottom Y) is known, see BLOCK_QUOTE().

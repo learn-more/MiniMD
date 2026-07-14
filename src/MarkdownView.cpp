@@ -182,6 +182,8 @@ namespace
 
 MarkdownView::MarkdownView()
 {
+    m_md.flags |= MD_FLAG_TASKLISTS | MD_FLAG_PERMISSIVEAUTOLINKS;
+
     LoadRecentFiles();
 }
 
@@ -192,31 +194,44 @@ MarkdownView::~MarkdownView()
 
 void MarkdownView::SetFonts(const FontSet& fonts)
 {
-    m_headingFonts = fonts.headings;
-    m_bodyFont = fonts.body;
+    m_fonts = fonts;
 
-    // Plain body text has no per-run font of its own (get_font() returns nullptr for it, which PushFont() takes to mean "whatever's current") - so
-    // the body's regular weight is swapped in via io.FontDefault instead, same as the rest of the frame (menus, dialogs) not just the document.
-    ImGui::GetIO().FontDefault = fonts.body;
+    // Plain, regular-weight body text has no per-run font of its own (get_font() returns nullptr for it, which PushFont() takes to mean
+    // "whatever's current") - so the body's regular weight is swapped in via io.FontDefault instead, same as the rest of the frame (menus,
+    // dialogs) not just the document.
+    ImGui::GetIO().FontDefault = fonts.regular.body;
 
-    // About dialog shares the same heading/body fonts rather than falling back to imgui_md's font-less default -
-    // see AboutView::get_font().
-    m_aboutView.SetFonts(fonts.body, fonts.headings);
+    // About dialog shares the regular-weight heading/body fonts rather than falling back to imgui_md's font-less default - its fixed credits
+    // text has no bold/italic spans, so it never needs the other three FontStyles - see AboutView::get_font().
+    m_aboutView.SetFonts(fonts.regular.body, fonts.regular.headings);
 }
 
 ImFont* MarkdownView::get_font() const
 {
-    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h). Only the size varies by heading level - bold/italic reuse this same font and
-    // are faked at render time instead (see vendor/imgui_md's render_text()), so m_is_strong/m_is_em don't factor in here at all. Plain body text
-    // falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault, set in SetFonts()) alone.
-    bool inHeading = m_hlevel >= 1 && m_hlevel <= m_headingFonts.size();
-    return inHeading ? m_headingFonts[m_hlevel - 1] : nullptr;
+    // Code spans/blocks always render in the dedicated monospace font, regardless of any surrounding emphasis - see BLOCK_CODE()/SPAN_CODE(),
+    // which push/pop it directly rather than routing through here.
+    if (m_is_code)
+        return m_fonts.mono;
+
+    const FontStyle* style = &m_fonts.regular;
+    if (m_is_strong && m_is_em)
+        style = &m_fonts.boldItalic;
+    else if (m_is_strong)
+        style = &m_fonts.bold;
+    else if (m_is_em)
+        style = &m_fonts.italic;
+
+    // m_hlevel is 1-6 inside a heading, 0 otherwise (see imgui_md.h) - only the size varies by heading level, the weight/slant selection above
+    // applies the same way whether or not this run is also a heading.
+    bool inHeading = m_hlevel >= 1 && m_hlevel <= style->headings.size();
+    if (inHeading)
+        return style->headings[m_hlevel - 1];
+
+    // Plain regular-weight, non-heading body text falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault, set in
+    // SetFonts()) alone instead of pushing a redundant duplicate of that same font.
+    return style == &m_fonts.regular ? nullptr : style->body;
 }
 
-// No monospace font is embedded (only Inter Regular, at body + heading sizes - see tools/make_fonts.py) and this app
-// deliberately doesn't add one just for code: two prior commits went the other way, dropping an already-embedded
-// weight and faking bold/italic instead of baking dedicated glyphs, specifically to keep the exe small. So code is
-// distinguished purely by a background band drawn in text_run() instead of by typeface - see there.
 void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
 {
     if (e)
@@ -225,6 +240,7 @@ void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
         if (d->lang.size > 0)
             ImGui::TextDisabled("%.*s", (int)d->lang.size, d->lang.text);
         ImGui::Indent();
+        ImGui::PushFont(m_fonts.mono);
     }
 
     m_is_code = e;
@@ -232,6 +248,7 @@ void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
 
     if (!e)
     {
+        ImGui::PopFont();
         ImGui::Unindent();
         ImGui::NewLine();
     }
@@ -240,6 +257,10 @@ void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
 void MarkdownView::SPAN_CODE(bool e)
 {
     m_is_code = e;
+    if (e)
+        ImGui::PushFont(m_fonts.mono);
+    else
+        ImGui::PopFont();
 }
 
 void MarkdownView::BLOCK_QUOTE(bool e)
@@ -292,13 +313,54 @@ void MarkdownView::render_task_checkbox(bool checked)
     ImGui::Dummy(ImVec2(sz, lineHeight));
 }
 
-// Real ImGui tables (ImGuiTableFlags_SizingFixedFit, see BLOCK_TABLE()) auto-fit each column's width to its content and don't expose a
-// per-cell content-alignment flag - TableSetupColumn()'s flags control sorting/resizing, not where text sits within the cell. Column setup
-// also has to happen before the first TableNextRow(), which the base class already calls in BLOCK_TR() before per-cell detail (and therefore
-// alignment) is even known. So instead of fighting the table API, this shifts the cell's own already-drawn vertices left/right after the fact:
-// capture the vertex-buffer range this cell's content lands in, then on leave, measure its actual drawn width from that range's bounding box
-// and nudge every vertex in it by however much slack is left in the (already-known, previously-fit) column width - the same "grab the
-// vertices just emitted and move them" trick render_text() uses for italics.
+// Swaps imgui_md's base BLOCK_TABLE/BLOCK_TR/BLOCK_TD (hand-tracked cursor positions, see vendor/imgui_md/imgui_md.cpp)
+// for real ImGui tables, which auto-fit each column's width to its widest cell instead of only ever sizing off the
+// header row. ImGuiTableFlags_SizingFixedFit does the auto-fit; NoHostExtendX keeps the table from stretching its
+// last column to fill whatever space is left in the window instead of stopping at its own content width.
+void MarkdownView::BLOCK_TABLE(const MD_BLOCK_TABLE_DETAIL* d, bool e)
+{
+    if (e)
+    {
+        // Whatever came before the table (e.g. a heading) may have left the cursor mid-line - always start the table on its own fresh line.
+        ImGui::NewLine();
+
+        // Captured *before* entering the table (once, before any column exists) rather than read from the current column's width inside
+        // get_table_wrap_width() - a value that depends on "whatever the column already measured" can never grow past its first, likely-
+        // too-small guess, which is exactly the feedback loop real auto-fit columns need to avoid.
+        m_tableWrapWidth = ImGui::GetContentRegionAvail().x;
+
+        ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+        if (m_table_border)
+            flags |= ImGuiTableFlags_Borders;
+
+        std::string id = "table" + std::to_string(m_nextTableId++);
+        ImGui::BeginTable(id.c_str(), (int)d->col_count, flags);
+    }
+    else
+    {
+        ImGui::EndTable();
+        ImGui::NewLine();
+    }
+}
+
+void MarkdownView::BLOCK_TR(bool e)
+{
+    if (e)
+        ImGui::TableNextRow();
+}
+
+float MarkdownView::get_table_wrap_width() const
+{
+    return m_tableWrapWidth;
+}
+
+// Real ImGui tables (ImGuiTableFlags_SizingFixedFit, see BLOCK_TABLE() above) auto-fit each column's width to its content and don't expose
+// a per-cell content-alignment flag - TableSetupColumn()'s flags control sorting/resizing, not where text sits within the cell. Column setup
+// also has to happen before the first TableNextRow() (see BLOCK_TR() above), before per-cell detail (and therefore alignment) is even known.
+// So instead of fighting the table API, this shifts the cell's own already-drawn vertices left/right after the fact: capture the vertex-
+// buffer range this cell's content lands in, then on leave, measure its actual drawn width from that range's bounding box and nudge every
+// vertex in it by however much slack is left in the (already-known, previously-fit) column width - the same "grab the vertices just emitted
+// and move them" trick render_text() uses for italics.
 void MarkdownView::BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e)
 {
     if (e)
@@ -397,6 +459,15 @@ bool MarkdownView::render_entity(const char* str, const char* str_end)
     return true;
 }
 
+// Base class leaves this a no-op (see vendor/imgui_md/imgui_md.cpp). render_text() ends every run with SameLine(0.0f, 0.0f) - zero
+// spacing - so two runs joined by a soft line break in the source (a plain newline inside a paragraph) glue together with no space
+// at all instead of collapsing to the single space CommonMark calls for.
+void MarkdownView::soft_break()
+{
+    ImGui::TextUnformatted(" ");
+    ImGui::SameLine(0.0f, 0.0f);
+}
+
 // m_href isn't a filesystem path as-is: it's whatever's between (parens) in the markdown, so relative references (the common case) need resolving
 // against the loaded file's own directory, not the process's current working directory (which could be anything - see LoadFile()).
 std::string MarkdownView::ResolveImagePath(const std::string& href) const
@@ -470,6 +541,51 @@ bool MarkdownView::get_image(image_info& nfo) const
     nfo.col_tint = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
     nfo.col_border = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     return true;
+}
+
+// Overrides the base class's SPAN_IMG() entirely (rather than extending it) for two reasons: enable the hover tooltip for an image's title
+// text (the base class ships that path commented out), and set m_is_image from get_image()'s actual result instead of unconditionally on
+// enter - m_is_image only suppresses the span's child text (the alt text) while there's actually an image drawn to look at instead (see
+// render_text()'s guard in vendor/imgui_md/imgui_md.cpp). If get_image() fails (bad path, unsupported format, remote URL with no network
+// code, ...) it stays false so the alt text renders as a normal (link-styled, since m_href is still set to the image src) fallback instead
+// of silently vanishing.
+void MarkdownView::SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e)
+{
+    if (!e)
+    {
+        m_href.clear();
+        m_is_image = false;
+        return;
+    }
+
+    m_href.assign(d->src.text, d->src.size);
+
+    image_info nfo;
+    m_is_image = get_image(nfo);
+    if (!m_is_image)
+        return;
+
+    const float scale = ImGui::GetIO().FontGlobalScale;
+    nfo.size.x *= scale;
+    nfo.size.y *= scale;
+
+    ImVec2 const csz = ImGui::GetContentRegionAvail();
+    if (nfo.size.x > csz.x)
+    {
+        const float r = nfo.size.y / nfo.size.x;
+        nfo.size.x = csz.x;
+        nfo.size.y = csz.x * r;
+    }
+
+    ImGui::Image(nfo.texture_id, nfo.size, nfo.uv0, nfo.uv1, nfo.col_tint, nfo.col_border);
+
+    if (ImGui::IsItemHovered())
+    {
+        if (d->title.size > 0)
+            ImGui::SetTooltip("%.*s", (int)d->title.size, d->title.text);
+        if (ImGui::IsMouseReleased(0))
+            open_url();
+    }
 }
 
 void MarkdownView::open_url() const
@@ -624,9 +740,9 @@ void MarkdownView::text_run(const char* str, const char* str_end, const ImVec2& 
 {
     m_pendingRuns.push_back({ str, str_end, min, max, ImGui::GetFont(), ImGui::GetFontSize() });
 
-    // Code spans/blocks get no dedicated monospace font (see BLOCK_CODE()) - a background band behind the glyphs is the only visual cue that
-    // this text is code, so draw it here, before the glyphs land on top of it. Block code gets a full-width, square-cornered band per wrapped
-    // line (m_inCodeBlock); an inline code span gets a tight, rounded pill hugging just its own text.
+    // Code spans/blocks already render in the monospace font (see BLOCK_CODE()/SPAN_CODE()) - this background band is a second, complementary
+    // visual cue behind the glyphs, so draw it here, before the glyphs land on top of it. Block code gets a full-width, square-cornered band per
+    // wrapped line (m_inCodeBlock); an inline code span gets a tight, rounded pill hugging just its own text.
     //
     // Skips zero-width runs (min.x == max.x): md4c delivers each code-block source line as two text_run() calls - the line's own content, then
     // a second, separate call for just the trailing '\n' terminating it (see md4c's own doc comment on MD_BLOCK_CODE). That second call has no
@@ -1095,6 +1211,9 @@ void MarkdownView::Render()
     UpdateSelectionInput();
 
     m_pendingRuns.clear();
+    // Reset so each table in the document (and each frame's re-render of it) gets a stable, table-scoped ID rather than one that keeps
+    // climbing forever - see m_nextTableId's own comment and BLOCK_TABLE().
+    m_nextTableId = 0;
     print(m_markdownText.c_str(), m_markdownText.c_str() + m_markdownText.length());
     m_runs.swap(m_pendingRuns);
 }
