@@ -25,6 +25,13 @@ workspace "MiniMD"
 -- Shared output directory pattern, referenced by every included project script.
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
+-- Generate src/Version.h at configure time
+if os.host() == "windows" then
+    os.execute('"' .. _MAIN_SCRIPT_DIR .. '/tools/gen_version.cmd"')
+else
+    os.execute("sh " .. _MAIN_SCRIPT_DIR .. "/tools/gen_version.sh")
+end
+
 group "Vendor"
     include "premake/imgui.lua"
     include "premake/glfw.lua"

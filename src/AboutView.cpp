@@ -1,12 +1,14 @@
 #include "AboutView.h"
 
 #include "PlatformUtil.h"
+#include "Version.h"
 
 namespace
 {
     const char kAboutHeader[] =
         "# MiniMD\n"
         "A lightweight markdown viewer built with **Dear ImGui**.\n\n"
+        "Version " MINIMD_VERSION "\n\n"
         "[https://learn-more.github.io/MiniMD/](https://learn-more.github.io/MiniMD/)\n\n"
         "by [Mark Jansen](https://github.com/learn-more)\n\n";
 

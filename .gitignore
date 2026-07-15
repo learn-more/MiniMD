@@ -11,3 +11,4 @@ obj/
 .vscode/
 src/imgui.ini
 imgui.ini
+src/Version.h

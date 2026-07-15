@@ -38,8 +38,13 @@ project "MiniMD"
         -- that exact name and uses it for the window/taskbar icon; it also becomes the exe's
         -- icon in Explorer. Linux has no equivalent packaging step (see README).
         files { "res/app.rc" }
+        -- Regenerates src/Version.h from `git describe` before every build 
+        -- The script only rewrites the file when the version string actually changed,
+        -- so an unchanged version doesn't trigger a recompile of everything that includes it.
+        prebuildcommands { '"$(SolutionDir)tools\\gen_version.cmd"' }
 
     filter "system:linux"
         links { "GL", "X11", "Xrandr", "Xinerama", "Xcursor", "Xi", "dl", "pthread" }
+        prebuildcommands { "sh %{wks.location}/tools/gen_version.sh" }
 
     filter {}
