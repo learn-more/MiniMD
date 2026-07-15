@@ -116,18 +116,54 @@ namespace
     }
 #endif
 
+    // ImGui's default glyph range (Basic Latin + Latin Supplement) doesn't cover the pass/fail/type marker symbols used in
+    // testdata/*.md headers (warning sign, check mark, cross mark, star, ...) - without it, those codepoints fall back to a
+    // "missing glyph" box. Segoe UI itself has no glyphs at all for these codepoints (confirmed via its cmap) - they only
+    // exist in Segoe UI Symbol, merged in below - so extending the range on Segoe UI alone wouldn't have been enough. The
+    // pictograph emoji blocks (U+1F300+) are bitmap-only in Segoe UI Emoji and out of reach for stb_truetype regardless of
+    // range, so those still render as missing-glyph boxes.
+    const ImWchar kTextGlyphRanges[] =
+    {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement (ImGui's own default range)
+        0x2600, 0x27BF, // Miscellaneous Symbols + Dingbats
+        0x2B00, 0x2BFF, // Miscellaneous Symbols and Arrows
+        0,
+    };
+
+    // Same two blocks, used when merging Segoe UI Symbol - only requesting the symbol ranges (not Basic Latin too) keeps the
+    // merge from re-baking glyphs Segoe UI already supplied.
+    const ImWchar kSymbolMergeRanges[] =
+    {
+        0x2600, 0x27BF,
+        0x2B00, 0x2BFF,
+        0,
+    };
+
     // Loads one weight/size of a system font by file path. Falls back to ImGui's built-in, no-file-dependency default font at the same pixel
     // size if the path doesn't resolve - e.g. a stripped-down Windows install missing one of these faces, or this binary run on a platform
     // where the paths below don't apply - so a missing font file degrades the look rather than crashing the app on startup.
-    ImFont* LoadSystemFont(ImGuiIO& io, const std::string& path, float size)
+    //
+    // If mergePath is non-empty, its glyphs (restricted to mergeRanges) are baked into the same ImFont via ImGui's font-merging
+    // mechanism - used to pull the Dingbats/Misc Symbols glyphs missing from Segoe UI out of Segoe UI Symbol instead.
+    ImFont* LoadSystemFont(ImGuiIO& io, const std::string& path, float size, const ImWchar* ranges = nullptr,
+                           const std::string& mergePath = std::string(), const ImWchar* mergeRanges = nullptr)
     {
-        ImFont* font = io.Fonts->AddFontFromFileTTF(path.c_str(), size);
-        if (font)
-            return font;
+        ImFont* font = io.Fonts->AddFontFromFileTTF(path.c_str(), size, nullptr, ranges);
+        if (!font)
+        {
+            ImFontConfig cfg;
+            cfg.SizePixels = size;
+            font = io.Fonts->AddFontDefault(&cfg);
+        }
 
-        ImFontConfig cfg;
-        cfg.SizePixels = size;
-        return io.Fonts->AddFontDefault(&cfg);
+        if (!mergePath.empty())
+        {
+            ImFontConfig mergeCfg;
+            mergeCfg.MergeMode = true;
+            io.Fonts->AddFontFromFileTTF(mergePath.c_str(), size, &mergeCfg, mergeRanges);
+        }
+
+        return font;
     }
 }
 
@@ -194,18 +230,19 @@ int main(int argc, char** argv)
     const std::string italicPath = fontDir + "segoeuii.ttf";
     const std::string boldItalicPath = fontDir + "segoeuiz.ttf";
     const std::string monoPath = fontDir + "consola.ttf";
+    const std::string symbolPath = fontDir + "seguisym.ttf";
 #else
     // Non-Windows builds (Linux support is scaffolded in the premake scripts but not yet exercised - see README) have no fixed system font path
     // to rely on; LoadSystemFont() falls back to ImGui's built-in default font for every weight/size below instead of failing to start.
-    const std::string regularPath, boldPath, italicPath, boldItalicPath, monoPath;
+    const std::string regularPath, boldPath, italicPath, boldItalicPath, monoPath, symbolPath;
 #endif
 
     auto loadStyle = [&](const std::string& path) -> MarkdownView::FontStyle
     {
         MarkdownView::FontStyle style;
-        style.body = LoadSystemFont(io, path, kBodySize);
+        style.body = LoadSystemFont(io, path, kBodySize, kTextGlyphRanges, symbolPath, kSymbolMergeRanges);
         for (size_t i = 0; i < style.headings.size(); ++i)
-            style.headings[i] = LoadSystemFont(io, path, kHeadingSizes[i]);
+            style.headings[i] = LoadSystemFont(io, path, kHeadingSizes[i], kTextGlyphRanges, symbolPath, kSymbolMergeRanges);
         return style;
     };
 
