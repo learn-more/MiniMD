@@ -47,6 +47,60 @@ static void DropCallback(GLFWwindow* window, int count, const char** paths)
         view->LoadFile(paths[0]);
 }
 
+// Renders and presents one frame. Pulled out of the main loop so it can also be invoked from RefreshCallback() below - on Windows, a live
+// border-drag enters a modal loop inside glfwPollEvents() that doesn't return until the drag ends, which would otherwise leave the window
+// showing a stale/blank frame for the whole drag. GLFW_REFRESH_CALLBACK fires from inside that modal loop whenever the OS asks the window to
+// repaint (e.g. once per size change while dragging), giving us a chance to draw a fresh frame despite glfwPollEvents() not having returned.
+static void RenderFrame(GLFWwindow* window)
+{
+    auto* view = static_cast<MarkdownView*>(glfwGetWindowUserPointer(window));
+    if (!view)
+        return;
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // One full-viewport window hosting the markdown content and its right-click context menu.
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                              ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+
+    ImGui::Begin("MiniMD", nullptr, flags);
+    view->Render();
+    ImGui::End();
+
+    // The ImGui window itself has no title bar (see flags above) - this drives the actual OS window/taskbar title instead. Only pushed to GLFW
+    // when it changes rather than every frame, since glfwSetWindowTitle() isn't free. Kept as a function-local static rather than a main()
+    // local since this function is now also called from RefreshCallback(), which has no access to main()'s stack.
+    static std::string lastTitle;
+    std::string title = view->GetWindowTitle();
+    if (title != lastTitle)
+    {
+        glfwSetWindowTitle(window, title.c_str());
+        lastTitle = title;
+    }
+
+    ImGui::Render();
+
+    int display_w, display_h;
+    glfwGetFramebufferSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.10f, 0.10f, 0.11f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    glfwSwapBuffers(window);
+}
+
+static void RefreshCallback(GLFWwindow* window)
+{
+    RenderFrame(window);
+}
+
 namespace
 {
 #if defined(_WIN32)
@@ -169,53 +223,17 @@ int main(int argc, char** argv)
     view.SetFonts(fontSet);
     glfwSetWindowUserPointer(window, &view);
     glfwSetDropCallback(window, DropCallback);
+    glfwSetWindowRefreshCallback(window, RefreshCallback);
 
     if (argc > 1)
         view.LoadFile(argv[1]);
     else
         view.LoadDefaultSample();
 
-    std::string lastTitle;
-
     while (!glfwWindowShouldClose(window) && !view.WantsQuit())
     {
         glfwPollEvents();
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        // One full-viewport window hosting the markdown content and its right-click context menu.
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
-
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
-
-        ImGui::Begin("MiniMD", nullptr, flags);
-        view.Render();
-        ImGui::End();
-
-        // The ImGui window itself has no title bar (see flags above) - this drives the actual OS window/taskbar title instead. Only pushed to GLFW
-        // when it changes rather than every frame, since glfwSetWindowTitle() isn't free.
-        std::string title = view.GetWindowTitle();
-        if (title != lastTitle)
-        {
-            glfwSetWindowTitle(window, title.c_str());
-            lastTitle = title;
-        }
-
-        ImGui::Render();
-
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
-        glViewport(0, 0, display_w, display_h);
-        glClearColor(0.10f, 0.10f, 0.11f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        glfwSwapBuffers(window);
+        RenderFrame(window);
     }
 
     ImGui_ImplOpenGL3_Shutdown();
