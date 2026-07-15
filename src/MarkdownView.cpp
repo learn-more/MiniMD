@@ -747,31 +747,23 @@ void MarkdownView::text_run(const char* str, const char* str_end, const ImVec2& 
 {
     m_pendingRuns.push_back({ str, str_end, min, max, ImGui::GetFont(), ImGui::GetFontSize() });
 
-    // Code spans/blocks already render in the monospace font (see BLOCK_CODE()/SPAN_CODE()) - this background band is a second, complementary
-    // visual cue behind the glyphs, so draw it here, before the glyphs land on top of it. Block code gets a full-width, square-cornered band per
-    // wrapped line (m_inCodeBlock); an inline code span gets a tight, rounded pill hugging just its own text.
+    // Draw a background band/pill behind the glyphs as a second visual cue, before they land: full-width per wrapped
+    // line for a code block (m_inCodeBlock), a tight pill around just the span otherwise.
     //
-    // Skips zero-width runs (min.x == max.x): md4c delivers each code-block source line as two text_run() calls - the line's own content, then
-    // a second, separate call for just the trailing '\n' terminating it (see md4c's own doc comment on MD_BLOCK_CODE). That second call has no
-    // glyphs to draw, but without this guard it would still stamp its own full-width background rect - stacking a second, doubly-blended layer
-    // over everything to the right of the real text (ImGuiCol_FrameBg has partial alpha, so overlapping fills visibly darken/saturate) and
-    // leaving the actual text's own background a shade lighter than the empty space beside it.
+    // Skips zero-width runs: md4c emits each code-block source line as two calls, content then a lone trailing '\n'
+    // with no glyphs - without this guard that second call would stack another (alpha-blended) full-width rect over
+    // the real one, darkening it relative to the empty space beside it.
     if (m_is_code && max.x > min.x)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImU32 col = ImGui::GetColorU32(ImGuiCol_FrameBg);
         if (m_inCodeBlock)
         {
-            // A source line commonly reaches here as more than one run (e.g. leading indentation and the line's own content are separate
-            // runs sharing the same row) - only the first one actually needs to draw, since its band already extends to the right margin. A
-            // later run on the same row falling through to the pill-drawing branch below (the "else" only meant for inline code *spans*)
-            // was the earlier bug here: it stacked a second, tightly-fitted layer over just its own glyphs, on top of the first run's already-
-            // full-width band, leaving that glyph run's background a shade darker than the empty space around it.
+            // Draw at most once per row - see m_codeBandRowY's doc comment for why.
             if (min.y != m_codeBandRowY)
             {
-                // Padded by half of ItemSpacing.y, not a fixed 1px, so this line's band and the next line's band meet with no gap between
-                // them: each TextUnformitted() call for a code line is its own ImGui "item", so consecutive lines sit ItemSpacing.y apart
-                // (well beyond the glyphs' own ascent/descent), and a fixed small pad left a strip of window background showing as a seam.
+                // Padded by half of ItemSpacing.y rather than a fixed 1px, so consecutive lines' bands meet with no
+                // gap: each code line is its own ImGui item, spaced ItemSpacing.y apart.
                 float padY = ImGui::GetStyle().ItemSpacing.y * 0.5f;
                 float rightX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
                 dl->AddRectFilled(ImVec2(min.x - 4.0f, min.y - padY), ImVec2(rightX, max.y + padY), col);
@@ -1127,8 +1119,7 @@ void MarkdownView::RenderContextMenu()
     ImGui::PopStyleVar();
 
 #if defined(_WIN32)
-    // Opened via a flag rather than calling OpenPopup() directly from the MenuItem above - MenuItem closes the popup stack it lives in on the same
-    // frame it's clicked, and opening a brand-new popup into a stack that's mid-close doesn't reliably work. Deferring one frame sidesteps that.
+    // Deferred one frame for the same reason as the About popup above.
     if (m_showOptionsDialog)
     {
         ImGui::OpenPopup("Options");

@@ -80,10 +80,8 @@ private:
     std::string m_currentDir;
     FontSet m_fonts;
 
-    // Set for the duration of a fenced/indented code block - distinguishes a code *block* line (full-width, square-cornered background band,
-    // see text_run()) from an inline code *span* (tight rounded pill) sharing the same underlying m_is_code flag. Both also get m_fonts.mono
-    // pushed for their duration - see BLOCK_CODE()/SPAN_CODE() in the .cpp - the band is still drawn on top of that for the same visual cue as
-    // before, just no longer the only one.
+    // Set for the duration of a fenced/indented code block; false for an inline code span (both share m_is_code).
+    // Used by text_run() to pick a full-width band vs. a tight pill - see there. Set in BLOCK_CODE()/SPAN_CODE().
     bool m_inCodeBlock = false;
 
     // Y (screen space) of the code-block line whose full-width background band was last drawn by text_run() - lets it draw that band once per
@@ -101,9 +99,8 @@ private:
     float m_cellColWidth = 0.0f;
     int m_cellVtxStart = 0;
 
-    // Page width captured by BLOCK_TABLE() when a table is entered, before any column exists - handed back by
-    // get_table_wrap_width() so the base class's (private) render_text() can wrap header/body cell text to a fixed,
-    // table-independent cap instead of the cell's own still-settling auto-fit column width, which would be circular.
+    // Page width captured by BLOCK_TABLE() when a table is entered, before any column exists. Returned from our
+    // get_table_wrap_width() override (see its doc comment in imgui_md.h for why).
     float m_tableWrapWidth = 0.0f;
     // Distinguishes each ImGui::BeginTable() call within one document - real ImGui tables need a unique ID string per
     // table, not just per column. Reset to 0 at the top of each Render() call (see there), incremented per table in
