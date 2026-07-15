@@ -637,8 +637,7 @@ void MarkdownView::LoadDefaultSample()
     m_currentDir.clear();
     m_markdownText =
         "# MiniMD\n\n"
-        "A lightweight markdown viewer built with **Dear ImGui**, using "
-        "[MD4C](https://github.com/mity/md4c) for parsing.\n\n"
+        "A lightweight markdown viewer built with **Dear ImGui**.\n\n"
         "## Getting started\n\n"
         "1. Drag and drop a `.md` file onto this window\n"
         "2. Or pass a file path as a command-line argument\n"
@@ -653,9 +652,7 @@ void MarkdownView::LoadDefaultSample()
         "Inline code spans | yes\n"
         "Tables (this one) | yes\n"
         "Local images | yes\n\n"
-        "Links: [Dear ImGui](https://github.com/ocornut/imgui), "
-        "[MD4C](https://github.com/mity/md4c), "
-        "[imgui_md](https://github.com/mekhontsev/imgui_md)\n";
+        "See right-click > Help > About for project links and full credits.\n";
     m_currentPath.clear();
     m_scrollToTop = true;
     ResetSelection();

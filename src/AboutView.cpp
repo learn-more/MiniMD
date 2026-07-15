@@ -6,6 +6,7 @@ namespace
 {
     const char kAboutHeader[] =
         "# MiniMD\n"
+        "A lightweight markdown viewer built with **Dear ImGui**.\n\n"
         "[https://learn-more.github.io/MiniMD/](https://learn-more.github.io/MiniMD/)\n\n"
         "by [Mark Jansen](https://github.com/learn-more)\n\n";
 
