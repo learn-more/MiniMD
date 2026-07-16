@@ -184,6 +184,11 @@ MarkdownView::MarkdownView()
 {
     // MD_FLAG_TASKLISTS is already on by default (see imgui_md.h's set_flag() doc comment).
     set_flag(MD_FLAG_PERMISSIVEAUTOLINKS, true);
+    // ^sup^ / ~sub~ / ==mark== - reuse the same m_is_sup/m_is_sub/m_is_mark rendering
+    // already driven by <sup>/<sub>/<mark> raw HTML (see imgui_md::check_html()).
+    set_flag(MD_FLAG_SUPERSCRIPTS, true);
+    set_flag(MD_FLAG_SUBSCRIPTS, true);
+    set_flag(MD_FLAG_HIGHLIGHT, true);
 
     LoadRecentFiles();
 }
@@ -233,10 +238,10 @@ MarkdownView::MdSizedFont MarkdownView::get_font() const
         return { font, font ? font->LegacySize : 0.0f };
     }
 
-    // Plain regular-weight, non-heading body text falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault, set in
-    // SetFonts()) alone instead of pushing a redundant duplicate of that same font.
-    if (style == &m_fonts.regular)
-        return { nullptr, 0.0f };
+    // Regular body text used to fall back to {nullptr, 0.0f} here so PushFont() would leave the current default font alone. But
+    // imgui_md's sub/sup rendering multiplies this size by 0.7 to shrink the glyph (see render_text()), and PushFont(_, 0.0f) means
+    // "keep current size" - so that sentinel silently defeated superscript/subscript for plain body text. Returning the real font/size
+    // is safe: whenever style is m_fonts.regular, the active font is already m_fonts.regular.body, so this is a no-op push either way.
     return { style->body, style->body ? style->body->LegacySize : 0.0f };
 }
 
@@ -678,6 +683,7 @@ void MarkdownView::LoadDefaultSample()
         "Ordered / unordered lists | yes\n"
         "Blockquotes | yes\n"
         "Strikethrough + underline | yes\n"
+        "Superscript / subscript / highlight | yes\n"
         "Inline code spans | yes\n"
         "Tables (this one) | yes\n"
         "Local images | yes\n\n"

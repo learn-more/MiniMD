@@ -1,6 +1,6 @@
 # CommonMark / GFM feature test
 
-A test document covering as much of CommonMark plus the GFM extensions imgui_md/MD4C enables (tables, strikethrough, underline) as practical, for eyeballing MiniMD's rendering. Not every feature listed will necessarily render correctly - that's the point of having it in one place.
+A test document covering as much of CommonMark plus the GFM extensions imgui_md/MD4C enables (tables, strikethrough, underline, superscript, subscript, highlight) as practical, for eyeballing MiniMD's rendering. Not every feature listed will necessarily render correctly - that's the point of having it in one place. The "Extended syntax" section near the end also covers md4c flags MiniMD does *not* enable, so their literal (unrendered) fallback is visible too.
 
 ## Headings
 
@@ -195,6 +195,62 @@ Escaped characters that would otherwise be markdown syntax: \*not italic\*, \[no
 Plain: 🎉 🚀 💡 📌 🔥 ⭐ 👍 😀 ✅ ❌ ⚠️
 
 Inside emphasis: **🎉 bold with emoji**, *🚀 italic with emoji*, ~~❌ strikethrough with emoji~~.
+
+## Extended syntax
+
+### Superscript, subscript, highlight (native syntax)
+
+E=mc^2^ is ==famous==, and water is H~2~O.
+
+### Superscript, subscript, highlight, keyboard key (inline HTML)
+
+Same result via raw HTML tags instead of the `^^`/`~~`/`==` syntax: E=mc<sup>2</sup> is <mark>famous</mark>, water is H<sub>2</sub>O. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy a selection.
+
+### Admonitions (GitHub-style, hand-rolled from blockquotes)
+
+Not an MD4C parser feature (`MD_FLAG_ADMONITIONS`/`MD_BLOCK_ADMONITION` are unused) - MiniMD detects the `[!KIND]` marker itself as the first text in a blockquote:
+
+> [!NOTE]
+> Useful information the user should know, even when skimming content.
+
+> [!TIP]
+> Helpful advice for doing things better.
+
+> [!IMPORTANT]
+> Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> Advises about risks or negative outcomes of certain actions.
+
+### Collapsible sections
+
+<details>
+<summary>Click to expand</summary>
+
+Hidden content, only laid out while expanded.
+
+</details>
+
+<details open>
+<summary>Starts expanded (has the <code>open</code> attribute)</summary>
+
+Visible immediately.
+
+</details>
+
+### Not enabled - expect literal, unrendered markup below
+
+These md4c extensions exist in the vendored parser but MiniMD never turns their flag on, so the syntax should show up as plain text rather than being parsed:
+
+- Wiki links (`MD_FLAG_WIKILINKS`): [[Some Page]]
+- Footnote reference (`MD_FLAG_FOOTNOTES`): a claim needing a citation[^1]
+- Spoiler (`MD_FLAG_SPOILERS`): ||a hidden spoiler||
+- LaTeX math (`MD_FLAG_LATEXMATHSPANS`): inline $x^2+y^2=z^2$ and display $$\int_0^1 x^2\,dx$$
+
+[^1]: This footnote definition should also render as literal text, not a collected reference at the bottom of the document.
 
 ## Images
 

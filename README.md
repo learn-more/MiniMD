@@ -7,7 +7,7 @@ A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake
 ## Why this stack
 
 - **GLFW + OpenGL3** - lightest, most portable windowing/renderer combo Dear ImGui supports. No platform SDK dependency, no extra runtime weight, no manual shader/pipeline setup.
-- **imgui_md + MD4C** (learn-more/imgui_md, rebased onto pthom/imgui_md's actively-maintained `imgui_bundle` branch, on mity/md4c) - real CommonMark/GFM rendering (tables, lists, blockquotes, task lists, autolinks, bold/italic, strikethrough, underline, fenced code, local images), not a toy subset. MD4C parses, imgui_md turns that into ImGui draw calls.
+- **imgui_md + MD4C** (learn-more/imgui_md, rebased onto pthom/imgui_md's actively-maintained `imgui_bundle` branch, on mity/md4c) - real CommonMark/GFM rendering (tables, lists, blockquotes, task lists, autolinks, bold/italic, strikethrough, underline, superscript, subscript, highlight, fenced code, local images), not a toy subset. MD4C parses, imgui_md turns that into ImGui draw calls.
 
 ## Layout
 
@@ -89,5 +89,6 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
 
 1. **`get_table_wrap_width()` hook** - real auto-fit table columns. `MarkdownView` overrides `BLOCK_TABLE`/`BLOCK_TR`/`BLOCK_TD` with its own `ImGui::BeginTable`/`SizingFixedFit` table (including alignment-aware `:--`/`--:` columns, via a post-hoc vertex shift - see `BLOCK_TD()`), and this hook gives `render_text()`'s word-wrap a fixed per-cell width to target instead of circularly wrapping to a still-settling column.
 2. **`text_run()` hook** - click-drag text selection. Records each wrapped chunk's `[str,str_end)` span (points into the original buffer) plus its on-screen rect, per frame - used for hit-testing clicks to byte offsets and slicing Ctrl+C copies straight out of the source text. Also paints the selection highlight.
+3. **`MD_SPAN_SUPERSCRIPT`/`MD_SPAN_SUBSCRIPT`/`MD_SPAN_MARK` dispatch** - upstream's `span()` switch has no case for these three md4c span types at all (they fall into its `assert(false)` default), so there was no virtual hook to override from `MarkdownView` without also patching the switch. Added `SPAN_SUPERSCRIPT()`/`SPAN_SUBSCRIPT()`/`SPAN_MARK()` virtuals with default bodies that mirror the existing `SPAN_U()`/`SPAN_DEL()` pattern - just toggle a state bool (`m_is_sup`/`m_is_sub`/`m_is_mark`) that `render_text()` already knew how to draw (it was previously only reachable via raw `<sup>`/`<sub>`/`<mark>` HTML tags).
 
 Everything else `MarkdownView`/`AboutView` need - task-list markers (`render_task_marker()`), extra parser flags (`set_flag()`), blockquote rendering, per-image tint/border - is already upstream in `pthom/imgui_md`, so no further patches are needed for those.

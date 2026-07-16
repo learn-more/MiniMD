@@ -14,7 +14,7 @@ MiniMD renders actual CommonMark/GFM markdown - tables, ordered lists, blockquot
 
 ## Features
 
-* Renders CommonMark/GFM: tables, lists, blockquotes, task list checkboxes, bold/italic, strikethrough, underline, fenced code, local images, auto-linked bare URLs
+* Renders CommonMark/GFM: tables, lists, blockquotes, task list checkboxes, bold/italic, strikethrough, underline, superscript, subscript, highlight, fenced code, local images, auto-linked bare URLs
 * Drag-and-drop a `.md` file onto the window, or pass one as a command-line argument
 * Recent Files menu (last 8, persisted across runs)
 * Zoom in/out (Ctrl+=/Ctrl+-/Ctrl+0)
