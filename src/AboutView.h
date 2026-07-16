@@ -20,7 +20,7 @@ public:
     void SetFonts(ImFont* body, const std::array<ImFont*, 6>& headings);
 
 protected:
-    ImFont* get_font() const override;
+    MdSizedFont get_font() const override;
     void open_url() const override;
 
 private:

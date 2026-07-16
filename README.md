@@ -7,7 +7,7 @@ A small, native markdown viewer. Dear ImGui + GLFW + OpenGL3, built with premake
 ## Why this stack
 
 - **GLFW + OpenGL3** - lightest, most portable windowing/renderer combo Dear ImGui supports. No platform SDK dependency, no extra runtime weight, no manual shader/pipeline setup.
-- **imgui_md + MD4C** (mekhontsev/imgui_md on mity/md4c) - real CommonMark/GFM rendering (tables, lists, blockquotes, task lists, autolinks, bold/italic, strikethrough, underline, fenced code, local images), not a toy subset. MD4C parses, imgui_md turns that into ImGui draw calls.
+- **imgui_md + MD4C** (learn-more/imgui_md, rebased onto pthom/imgui_md's actively-maintained `imgui_bundle` branch, on mity/md4c) - real CommonMark/GFM rendering (tables, lists, blockquotes, task lists, autolinks, bold/italic, strikethrough, underline, fenced code, local images), not a toy subset. MD4C parses, imgui_md turns that into ImGui draw calls.
 
 ## Layout
 
@@ -80,17 +80,14 @@ Copying the current selection's raw markdown source is Ctrl+C (no menu item need
 
 - No native "Open File" dialog or path-entry box - open by drag/drop, argv[1], or Recent Files.
 - No remote image loading - only local files resolve; `http(s)://` image refs are silently skipped.
-- Table columns aren't alignment-aware - `:--`/`--:` markers in the source don't affect layout.
 - GLFW premake script targets the pre-3.4 source layout (tag `3.3.9`); bumping past that needs `premake/glfw.lua` updated for the new platform-abstraction sources.
 - Text selection has no select-all and doesn't auto-scroll past the top/bottom edge; selecting across a table follows draw order, which can look odd for a whole multi-column table.
 
 ### Local patches to vendor/imgui_md
 
-`vendor/imgui_md` isn't pristine upstream. Changes prefer overriding an existing (or newly added) `protected virtual` hook from `MarkdownView`/`AboutView` over hand-editing the vendored `.cpp`. Committed inside the submodule itself:
+`vendor/imgui_md` isn't pristine upstream: it's `learn-more/imgui_md`, branched from `pthom/imgui_md`'s `imgui_bundle` branch (itself a much more actively-maintained fork of the original, long-dead `mekhontsev/imgui_md`). Changes prefer overriding an existing (or newly added) `protected virtual` hook from `MarkdownView`/`AboutView` over hand-editing the vendored `.cpp`. Committed inside the submodule itself, on the `minimd-patches` branch:
 
-1. **Compile fix** - `get_image()`'s default assigns `ImFontAtlas::TexID` (now `ImTextureRef` since imgui 1.92) straight into an `ImTextureID` field. Fixed to `nfo.texture_id = ImGui::GetIO().Fonts->TexID.GetTexID();`.
-2. **`get_table_wrap_width()` hook** - real auto-fit table columns. Upstream sizes columns off the header row alone, squishing body content; `MarkdownView` overrides `BLOCK_TABLE`/`BLOCK_TR`/`BLOCK_TD` with real `ImGui::BeginTable`/`SizingFixedFit`, and this new hook gives `render_text()`'s word-wrap a fixed per-cell width to target instead of circularly wrapping to a still-settling column.
-3. **`text_run()` hook** - click-drag text selection. Records each wrapped chunk's `[str,str_end)` span (points into the original buffer) plus its on-screen rect, per frame - used for hit-testing clicks to byte offsets and slicing Ctrl+C copies straight out of the source text. Also paints the selection highlight.
-4. **`render_task_checkbox()` hook** - task list items (`- [ ]`/`- [x]`). `BLOCK_LI()` got a small patch to call this instead of the usual bullet; `MarkdownView` draws the checkbox via `ImDrawList` rather than relying on a font glyph.
-5. **`m_md` made `protected`** - lets `MarkdownView`'s constructor OR in `MD_FLAG_TASKLISTS`/`MD_FLAG_PERMISSIVEAUTOLINKS` after base construction, since a virtual hook can't reach the base class's own constructor.
-6. **Blockquote rendering** - `BLOCK_QUOTE` was an empty stub. Now indents, dims the text, and draws a per-nesting-level left bar spanning the quote's height.
+1. **`get_table_wrap_width()` hook** - real auto-fit table columns. `MarkdownView` overrides `BLOCK_TABLE`/`BLOCK_TR`/`BLOCK_TD` with its own `ImGui::BeginTable`/`SizingFixedFit` table (including alignment-aware `:--`/`--:` columns, via a post-hoc vertex shift - see `BLOCK_TD()`), and this hook gives `render_text()`'s word-wrap a fixed per-cell width to target instead of circularly wrapping to a still-settling column.
+2. **`text_run()` hook** - click-drag text selection. Records each wrapped chunk's `[str,str_end)` span (points into the original buffer) plus its on-screen rect, per frame - used for hit-testing clicks to byte offsets and slicing Ctrl+C copies straight out of the source text. Also paints the selection highlight.
+
+Everything else `MarkdownView`/`AboutView` need - task-list markers (`render_task_marker()`), extra parser flags (`set_flag()`), blockquote rendering, per-image tint/border - is already upstream in `pthom/imgui_md`, so no further patches are needed for those.

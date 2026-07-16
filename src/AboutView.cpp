@@ -18,7 +18,7 @@ namespace
         "## Third-party libraries\n"
         "- [Dear ImGui](https://github.com/ocornut/imgui)\n"
         "- [GLFW](https://github.com/glfw/glfw)\n"
-        "- [imgui_md](https://github.com/mekhontsev/imgui_md) "
+        "- [imgui_md](https://github.com/pthom/imgui_md) "
         "(fork: [learn-more/imgui_md](https://github.com/learn-more/imgui_md))\n"
         "- [MD4C](https://github.com/mity/md4c)\n"
         "- [stb_image](https://github.com/nothings/stb)\n\n";
@@ -38,13 +38,16 @@ void AboutView::SetFonts(ImFont* body, const std::array<ImFont*, 6>& headings)
     m_headingFonts = headings;
 }
 
-ImFont* AboutView::get_font() const
+AboutView::MdSizedFont AboutView::get_font() const
 {
     // Mirrors MarkdownView::get_font() - see there. m_bodyFont isn't returned here (unlike MarkdownView, which
     // swaps it into io.FontDefault in SetFonts()): the About popup never touches FontDefault, so plain body text
     // falls back to nullptr/"whatever's current" same as the base class default.
     bool inHeading = m_hlevel >= 1 && m_hlevel <= m_headingFonts.size();
-    return inHeading ? m_headingFonts[m_hlevel - 1] : nullptr;
+    if (!inHeading)
+        return { nullptr, 0.0f };
+    ImFont* font = m_headingFonts[m_hlevel - 1];
+    return { font, font ? font->LegacySize : 0.0f };
 }
 
 void AboutView::open_url() const

@@ -57,7 +57,7 @@ public:
 
 protected:
     // imgui_md overrides - see vendor/imgui_md/imgui_md.h for the full set.
-    ImFont* get_font() const override;
+    MdSizedFont get_font() const override;
     bool get_image(image_info& nfo) const override;
     void open_url() const override;
     void text_run(const char* str, const char* str_end, const ImVec2& min, const ImVec2& max) override;
@@ -70,7 +70,7 @@ protected:
     void BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e) override;
     void SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e) override;
     void BLOCK_QUOTE(bool e) override;
-    void render_task_checkbox(bool checked) override;
+    void render_task_marker(bool checked) override;
     float get_table_wrap_width() const override;
 
 private:

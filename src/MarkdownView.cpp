@@ -182,7 +182,8 @@ namespace
 
 MarkdownView::MarkdownView()
 {
-    m_md.flags |= MD_FLAG_TASKLISTS | MD_FLAG_PERMISSIVEAUTOLINKS;
+    // MD_FLAG_TASKLISTS is already on by default (see imgui_md.h's set_flag() doc comment).
+    set_flag(MD_FLAG_PERMISSIVEAUTOLINKS, true);
 
     LoadRecentFiles();
 }
@@ -206,12 +207,14 @@ void MarkdownView::SetFonts(const FontSet& fonts)
     m_aboutView.SetFonts(fonts.regular.body, fonts.regular.headings);
 }
 
-ImFont* MarkdownView::get_font() const
+// Fonts here are still separate pre-baked ImFont* per size (see FontStyle/FontSet in MarkdownView.h), not imgui_md's newer
+// dynamic-sizing model - so the returned size is just each font's own LegacySize (the size it was baked/AddFont()'d at).
+MarkdownView::MdSizedFont MarkdownView::get_font() const
 {
     // Code spans/blocks always render in the dedicated monospace font, regardless of any surrounding emphasis - see BLOCK_CODE()/SPAN_CODE(),
     // which push/pop it directly rather than routing through here.
     if (m_is_code)
-        return m_fonts.mono;
+        return { m_fonts.mono, m_fonts.mono ? m_fonts.mono->LegacySize : 0.0f };
 
     const FontStyle* style = &m_fonts.regular;
     if (m_is_strong && m_is_em)
@@ -225,11 +228,16 @@ ImFont* MarkdownView::get_font() const
     // applies the same way whether or not this run is also a heading.
     bool inHeading = m_hlevel >= 1 && m_hlevel <= style->headings.size();
     if (inHeading)
-        return style->headings[m_hlevel - 1];
+    {
+        ImFont* font = style->headings[m_hlevel - 1];
+        return { font, font ? font->LegacySize : 0.0f };
+    }
 
     // Plain regular-weight, non-heading body text falls back to nullptr so PushFont() leaves whatever's current (io.FontDefault, set in
     // SetFonts()) alone instead of pushing a redundant duplicate of that same font.
-    return style == &m_fonts.regular ? nullptr : style->body;
+    if (style == &m_fonts.regular)
+        return { nullptr, 0.0f };
+    return { style->body, style->body ? style->body->LegacySize : 0.0f };
 }
 
 void MarkdownView::BLOCK_CODE(const MD_BLOCK_CODE_DETAIL* d, bool e)
@@ -281,6 +289,11 @@ void MarkdownView::BLOCK_QUOTE(bool e)
         ImGui::Indent();
         m_quoteStack.push_back(ImGui::GetCursorScreenPos());
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+
+        // The quote frame provides the inter-block gap before its first child itself (via the NewLine() above),
+        // so suppress the dispatcher's own gap for that first child - otherwise it lands between the position
+        // just captured above and the first child's actual text, leaving the bar's top floating above the text.
+        m_skip_next_block_gap = true;
         return;
     }
 
@@ -291,7 +304,11 @@ void MarkdownView::BLOCK_QUOTE(bool e)
     // indent gutter so it sits between the outer margin and the indented text.
     ImVec2 top = m_quoteStack.back();
     m_quoteStack.pop_back();
-    float bottomY = ImGui::GetCursorScreenPos().y;
+
+    // Cursor Y at this point is the TOP of the last rendered line, not its bottom - render_text() ends each
+    // paragraph with SameLine(0,0) rather than a real NewLine(), so nothing ever advances past it. Extend by
+    // one line height, or the bar falls short and the last line's text hangs below where the bar ends.
+    float bottomY = ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight();
     float barX = top.x - ImGui::GetStyle().IndentSpacing * 0.5f;
     ImGui::GetWindowDrawList()->AddLine(ImVec2(barX, top.y), ImVec2(barX, bottomY),
         ImGui::GetColorU32(ImGuiCol_TextDisabled), 2.0f);
@@ -304,7 +321,7 @@ void MarkdownView::BLOCK_QUOTE(bool e)
 // file in a read-only viewer - so this is plain ImDrawList output instead: a square outline, plus a checkmark
 // stroke if the item is marked done. Drawn as vector shapes rather than a "☐"/"☑" glyph so it doesn't
 // depend on those code points being present in whatever font is baked into the atlas.
-void MarkdownView::render_task_checkbox(bool checked)
+void MarkdownView::render_task_marker(bool checked)
 {
     const float sz = ImGui::GetFontSize() * 0.8f;
     const float lineHeight = ImGui::GetTextLineHeight();
@@ -548,8 +565,6 @@ bool MarkdownView::get_image(image_info& nfo) const
     nfo.size = ImVec2((float)img.width, (float)img.height);
     nfo.uv0 = ImVec2(0.0f, 0.0f);
     nfo.uv1 = ImVec2(1.0f, 1.0f);
-    nfo.col_tint = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-    nfo.col_border = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     return true;
 }
 
@@ -587,7 +602,8 @@ void MarkdownView::SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e)
         nfo.size.y = csz.x * r;
     }
 
-    ImGui::Image(nfo.texture_id, nfo.size, nfo.uv0, nfo.uv1, nfo.col_tint, nfo.col_border);
+    // No tint/border: image_info dropped those fields upstream when ImGui::Image() itself did - see ImageWithBg() if either's ever needed.
+    ImGui::Image(nfo.texture_id, nfo.size, nfo.uv0, nfo.uv1);
 
     if (ImGui::IsItemHovered())
     {
@@ -622,6 +638,11 @@ void MarkdownView::LoadFile(const std::string& path)
     std::ostringstream ss;
     ss << file.rdbuf();
     m_markdownText = ss.str();
+
+    // Strip UTF-8 BOM - otherwise it sits before the first "#" and stops the heading rule from matching.
+    if (m_markdownText.compare(0, 3, "\xEF\xBB\xBF") == 0)
+        m_markdownText.erase(0, 3);
+
     m_currentPath = path;
     size_t slash = path.find_last_of("\\/");
     m_currentDir = slash == std::string::npos ? std::string() : path.substr(0, slash);
