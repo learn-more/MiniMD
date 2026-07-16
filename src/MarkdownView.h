@@ -67,6 +67,7 @@ protected:
     void SPAN_CODE(bool e) override;
     void BLOCK_TABLE(const MD_BLOCK_TABLE_DETAIL* d, bool e) override;
     void BLOCK_TR(bool e) override;
+    void BLOCK_TH(const MD_BLOCK_TD_DETAIL* d, bool e) override;
     void BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e) override;
     void SPAN_IMG(const MD_SPAN_IMG_DETAIL* d, bool e) override;
     void BLOCK_QUOTE(bool e) override;

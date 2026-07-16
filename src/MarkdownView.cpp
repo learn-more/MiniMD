@@ -388,6 +388,14 @@ float MarkdownView::get_table_wrap_width() const
 // buffer range this cell's content lands in, then on leave, measure its actual drawn width from that range's bounding box and nudge every
 // vertex in it by however much slack is left in the (already-known, previously-fit) column width - the same "grab the vertices just emitted
 // and move them" trick render_text() uses for italics.
+// GFM header cells arrive as their own MD_BLOCK_TH block type (not MD_BLOCK_TD) - the base class's BLOCK_TH()
+// gates on its own m_table_open, which our BLOCK_TABLE() override above never touches, so without this override
+// header cells silently no-op instead of rendering. Same struct, same handling as body cells.
+void MarkdownView::BLOCK_TH(const MD_BLOCK_TD_DETAIL* d, bool e)
+{
+    BLOCK_TD(d, e);
+}
+
 void MarkdownView::BLOCK_TD(const MD_BLOCK_TD_DETAIL* d, bool e)
 {
     if (e)
