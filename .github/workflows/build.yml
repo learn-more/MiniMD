@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
